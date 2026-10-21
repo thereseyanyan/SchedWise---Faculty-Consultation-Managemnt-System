@@ -11,6 +11,27 @@ FCAMS is a local-first academic consultation platform for students, faculty, and
 
 ---
 
+## Change Summary (2026-10-21)
+
+- Applied a purple theme throughout the interface.
+- Made student, faculty, and administrator dashboard summary cards clickable, opening the corresponding lists or analytics.
+- Reserved scrollbar space to prevent horizontal layout shifts between short and long pages.
+- Restricted login to email and password; STU/FAC IDs remain account identifiers.
+- Added fixed `STU-` and `FAC-` prefixes with digits-only input, preserved leading zeroes, optional automatic ID generation, and duplicate prevention. Assigned IDs remain permanent.
+- Made account roles permanent, including for administrators.
+- Added account deletion that removes access while retaining appointment and audit history.
+- Placed validation errors below the relevant form fields and kept dialog errors visible inside their forms.
+- Allowed requests to different faculty while limiting each student to one pending request per faculty. Pending, reschedule-requested, and confirmed appointment times cannot overlap on the same date.
+- Limited booking choices to actual faculty availability, accounting for blocked schedules and existing bookings.
+- Included future pending requests in faculty request handling and updated appointment counts after approval or rejection.
+- Moved the privacy notice from dashboards to registration and Account Settings > Privacy.
+- Added Yes/No confirmations before sign-out, deletions, schedule changes, appointment actions, and other important account changes.
+- Standardized system-authored interface text in English.
+- Kept local Mailpit testing and automatic startup while hiding inbox links and on-screen debug tokens.
+- Updated setup documentation and regression coverage for account IDs, roles, booking rules, deletion, and email testing.
+
+Validation recorded for these changes includes TypeScript checking, production builds, PHP syntax checks, PowerShell parsing, API regressions, and client CSRF tests. Browser interaction and multi-worker concurrency coverage remain pending. This summary is documentation-only; the high-priority TODO list is unchanged.
+
 ## 0. Documentation Contract
 
 **Every code, API, database, configuration, or tooling change must update this README in the same change.**

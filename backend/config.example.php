@@ -23,8 +23,7 @@ return [
         'password' => '',
         'charset' => 'utf8mb4',
     ],
-    // Local development default: Mailpit on the loopback interface.
-    // For real email, set FCAMS_MAIL_* environment variables to your SMTP
+    // Local Mailpit testing defaults; optional FCAMS_MAIL_* overrides for an SMTP
     // provider. Use encryption "tls" for port 587 or "ssl" for port 465.
     'mail' => [
         'host' => getenv('FCAMS_MAIL_HOST') ?: '127.0.0.1',

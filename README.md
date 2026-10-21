@@ -1,5 +1,8 @@
 # FCAMS — Faculty Consultation and Appointment Management System
 
+> **Current email setup:** Local Mailpit testing is restored. The launcher starts Mailpit automatically; inbox links remain hidden in the app. No real email provider or paid subscription is needed.
+
+
 The document reserves a stable vertical scrollbar gutter so centered headers, dashboard cards, and content do not shift horizontally between short and long pages. Older browsers use an always-reserved vertical scrollbar as a fallback.
 
 FCAMS is a local-first academic consultation platform for students, faculty, and administrators. It centralizes faculty availability, appointment requests, consultation records, notifications, and reports in one React + PHP + MySQL application.
@@ -71,7 +74,7 @@ FCAMS provides:
 - Security headers, generic 500 responses, and `no-store` API responses
 - One-click Windows launcher and stop shortcut
 - Launcher preflight checks for PHP 8+, Node.js 20.19+/22.12+, npm, and MySQL; missing prerequisites get a clear dialog with the requirement and an optional download page
-- Local verification and password-reset email delivery through Mailpit + vendored PHPMailer, with automatic Mailpit download on first launch
+- Verification and password-reset delivery through a configured SMTP provider using vendored PHPMailer; no automatic Mailpit download/startup
 - Account settings dialog for profile editing and signed-in password changes
 - Repeatable API regression suite covering auth, CSRF, roles, verified registration, resend/verification, reset email, booking, profile, and password changes
 - Explicit demo reset command and timestamped SQL backup/restore commands
@@ -125,7 +128,7 @@ PHP built-in server
                                  └── web inbox http://localhost:8025
 ```
 
-Apache is **not required** for local use. The launcher starts the PHP built-in server, Vite, and Mailpit directly. Vite proxies `/api` to PHP so cookies and CSRF tokens remain same-origin. Mailpit catches local transactional email and never sends it to the internet.
+Apache is **not required** for local use. The launcher starts the PHP built-in server and Vite. Vite proxies `/api` to PHP so cookies and CSRF tokens remain same-origin. Transactional emails use the configured SMTP provider; mail remains unavailable until configured.
 
 ### Technology
 
@@ -136,7 +139,7 @@ Apache is **not required** for local use. The launcher starts the PHP built-in s
 | Database | MySQL 9.5 locally |
 | Local tools | PowerShell launcher, VBS hidden wrapper, Windows shortcuts |
 | Auth | PHP sessions + password hashing (`PASSWORD_DEFAULT`) |
-| Email | Mailpit locally; PHPMailer 7.1.1 vendored under `backend/vendor/phpmailer` |
+| Email | Real SMTP provider; PHPMailer 7.1.1 vendored under `backend/vendor/phpmailer` |
 | Tests | Node built-in test runner (`node:test`) against the running API |
 
 ### Request conventions
@@ -614,7 +617,7 @@ Then open `http://localhost:5173`.
 - `db.host`, `db.port`, `db.name`, `db.user`, `db.password`, `db.charset`
 - `mail.host`, `mail.port`, `mail.username`, `mail.password`, `mail.encryption`, `mail.from_email`, `mail.from_name`, `mail.timeout`
 
-The local defaults point at Mailpit (`127.0.0.1:1025`, no auth, no encryption). For real SMTP, set the environment variables instead of editing committed files:
+SMTP defaults to an empty host/sender, port 587, and TLS. Set the environment variables below, or enter provider values only in ignored `backend/config.php`:
 
 ```text
 FCAMS_MAIL_HOST=smtp.example.com
@@ -889,3 +892,34 @@ Private notes are protected by application authorization, not field encryption; 
 
 - Added a stable root scrollbar gutter with a legacy browser fallback to prevent horizontal layout shifts when navigating between short and scrollable pages.
 - Last verified 2026-10-21: production build passed. Visual browser verification remains pending. High-priority TODO unchanged.
+
+
+### Hide local inbox links - 2026-10-21
+
+- Removed visible Mailpit inbox links from login and password-reset pages. Mailpit startup, local email capture, and developer access at http://localhost:8025 remain available for testing. Hiding links does not add inbox authentication.
+- Local Mailpit testing requires no subscription or paid email provider.
+- Last verified 2026-10-21: frontend TypeScript check and production build passed. High-priority TODO unchanged.
+
+
+### Real SMTP migration - 2026-10-21
+
+- Removed automatic Mailpit download and startup. Existing tracked-process cleanup remains compatible with old launcher state.
+- Removed inbox links and debug-code/verification-link UI. Local configuration now uses provider environment variables and disables debug token responses; database credentials are unchanged.
+- Configure `FCAMS_MAIL_HOST`, `FCAMS_MAIL_PORT` (usually 587), `FCAMS_MAIL_USERNAME`, `FCAMS_MAIL_PASSWORD`, `FCAMS_MAIL_ENCRYPTION` (`tls` or `ssl`), and `FCAMS_MAIL_FROM` (a sender authorized by your provider). `FCAMS_FRONTEND_URL` must be the address recipients can open for verification. Alternatively, set equivalent values in ignored `backend/config.php`; never commit credentials.
+- Restart the PHP backend after changing process environment variables. Keep `app.debug` false for real delivery. Registration stays pending until verification; no SMTP credentials are configured by this change.
+- Remote SMTP requires encrypted transport. There is no fallback to local Mailpit or to showing reset codes in the UI. The SMTP provider determines cost and sending limits; this code does not create a paid subscription.
+- The full API/email suite requires a separately started local Mailpit fixture and explicitly configured local test mail/debug settings. Its preflight now refuses real SMTP settings to avoid sending test messages to real recipients. Do not run the full email suite against real mail credentials.
+- Last verified 2026-10-21: changed PHP syntax, PowerShell parsing, TypeScript check, frontend production build, and client CSRF tests. Real delivery remains unverified pending SMTP provider credentials; full email API tests were not run against real SMTP.
+- High-priority TODO: configure and verify the SMTP provider and authorized sender, then test registration/reset delivery with an intended recipient. Browser/concurrency coverage remains pending.
+
+
+### Restore local Mailpit testing - 2026-10-21
+
+- Reversed the real-SMTP migration: restored local Mailpit defaults and automatic launcher startup/download. Inbox links and on-screen debug tokens remain hidden. Local debug mode is enabled for the existing email API regression fixture. The real-SMTP setup steps above are historical and are not required for local testing.
+- Last verified 2026-10-21: PHP syntax and PowerShell parsing passed. SMTP provider setup is no longer pending. High-priority SMTP configuration TODO withdrawn; browser coverage remains pending.
+
+
+### Fixed account ID prefixes - 2026-10-21
+
+- Admin account creation displays a fixed FAC- or STU- prefix and an editable digits-only suffix. Leading zeroes are preserved; supply at least four digits or leave the suffix blank to generate a unique ID. The API continues to receive the full prefixed ID, reject duplicates, and prevent changes after creation.
+- Last verified 2026-10-21: TypeScript, production build, and API regressions passed. Browser interaction coverage remains pending; high-priority TODO unchanged.

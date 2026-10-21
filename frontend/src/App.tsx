@@ -291,7 +291,6 @@ function AuthenticationGate({ onLogin }: { onLogin: (user: User) => void }) {
   const [needsVerification, setNeedsVerification] = useState(
     Boolean(initialVerifyToken),
   )
-  const [verificationUrl, setVerificationUrl] = useState("")
   const [resetEmail, setResetEmail] = useState("")
   const [resetCode, setResetCode] = useState("")
   const [resetPassword, setResetPassword] = useState("")
@@ -352,7 +351,6 @@ function AuthenticationGate({ onLogin }: { onLogin: (user: User) => void }) {
     setResetErrors({})
     setError("")
     setNotice("")
-    setVerificationUrl("")
     if (next === "register") {
       setNeedsVerification(false)
     }
@@ -377,7 +375,6 @@ function AuthenticationGate({ onLogin }: { onLogin: (user: User) => void }) {
     setLoading(true)
     setError("")
     setNotice("")
-    setVerificationUrl("")
     try {
       const { user } = await authApi.login({ email, password })
       onLogin(user)
@@ -400,21 +397,8 @@ function AuthenticationGate({ onLogin }: { onLogin: (user: User) => void }) {
     setNotice("")
     try {
       const result = await authApi.resendVerification(email.trim())
-      const mailFailed = result.debug_mail_sent === false
       setNeedsVerification(true)
-      setVerificationUrl(
-        mailFailed ? result.debug_verification_url ?? "" : "",
-      )
-      setNotice(
-        [
-          result.message,
-          mailFailed && result.debug_verification_url
-            ? "A local debug verification link is available below."
-            : "",
-        ]
-          .filter(Boolean)
-          .join(" "),
-      )
+      setNotice(result.message)
     } catch (err) {
       setError(
         errorMessage(err, "Unable to resend the verification email right now."),
@@ -439,16 +423,7 @@ function AuthenticationGate({ onLogin }: { onLogin: (user: User) => void }) {
       if (resetStep === "request") {
         const result = await authApi.forgotPassword(resetEmail.trim())
         setResetStep("confirm")
-        const details = result.debug_code
-          ? [
-              `Dev code: ${result.debug_code} (${
-                result.debug_mail_sent
-                  ? "also sent to the local inbox"
-                  : "email delivery failed"
-              }).`,
-            ]
-          : []
-        setNotice([result.message, ...details].join(" "))
+        setNotice(result.message)
       } else {
         if (!/^\d{6}$/.test(resetCode.trim())) {
           setResetErrors({ code: "Enter the 6-digit reset code." })
@@ -507,12 +482,9 @@ function AuthenticationGate({ onLogin }: { onLogin: (user: User) => void }) {
           result.message,
           result.student_number ? `Your Student ID is ${result.student_number}.` : "",
           result.email_sent === false
-            ? "The verification email could not be sent. Use Resend below after checking Mailpit."
+            ? "The verification email could not be sent. Try Resend later or contact your administrator."
             : "Open the link in your email to activate the account.",
         ].join(" "),
-      )
-      setVerificationUrl(
-        result.email_sent === false ? result.debug_verification_url ?? "" : "",
       )
       setNeedsVerification(true)
       setEmail(reg.email.trim().toLowerCase())
@@ -620,8 +592,7 @@ function AuthenticationGate({ onLogin }: { onLogin: (user: User) => void }) {
                       setEmail(e.target.value)
                       setError("")
                       setNeedsVerification(false)
-                      setVerificationUrl("")
-                    }}
+                                      }}
                     placeholder="name@university.edu"
                     autoComplete="email"
                     className={pillField}
@@ -679,14 +650,6 @@ function AuthenticationGate({ onLogin }: { onLogin: (user: User) => void }) {
                     >
                       Resend verification email
                     </Button>
-                    {verificationUrl && (
-                      <a
-                        href={verificationUrl}
-                        className="mt-2 block break-all text-[11px] font-semibold text-purple-700 underline underline-offset-2"
-                      >
-                        Open local debug verification link
-                      </a>
-                    )}
                   </div>
                 )}
               </div>
@@ -701,20 +664,6 @@ function AuthenticationGate({ onLogin }: { onLogin: (user: User) => void }) {
               <p className="mt-5 rounded-xl bg-slate-50 px-4 py-3 text-[11px] leading-5 text-slate-500">
                 Dev admin: admin@fcams.edu / Admin123!
               </p>
-              {import.meta.env.DEV && (
-                <p className="mt-2 px-1 text-[11px] leading-5 text-slate-500">
-                  Verification and reset emails appear in the{" "}
-                  <a
-                    href="http://localhost:8025"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-semibold text-purple-600 underline underline-offset-2"
-                  >
-                    Mailpit inbox
-                  </a>
-                  .
-                </p>
-              )}
             </form>
           )}
 
@@ -728,20 +677,6 @@ function AuthenticationGate({ onLogin }: { onLogin: (user: User) => void }) {
                   ? "Enter the email linked to your account and we'll issue a verification code."
                   : "Enter the 6-digit code and choose a new password."}
               </p>
-              {import.meta.env.DEV && (
-                <p className="mt-2 text-xs leading-5 text-slate-500">
-                  Local demo: reset emails appear in the{" "}
-                  <a
-                    href="http://localhost:8025"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-semibold text-purple-600 underline underline-offset-2"
-                  >
-                    Mailpit inbox
-                  </a>
-                  .
-                </p>
-              )}
               <label className="mt-7 block">
                 <span className={pillLabel}>Institutional Email Address</span>
                 <InputTag
@@ -4010,8 +3945,7 @@ function AdminUsersView({ roleFilter }: { roleFilter?: string }) {
     if (!form.last_name.trim()) fields.last_name = "Enter a last name."
     if (!/^\S+@\S+\.\S+$/.test(form.email.trim())) fields.email = "Enter a valid email address."
     if (!isStrongPassword(form.password)) fields.password = passwordPolicyMessage
-    const prefix = createType === "Faculty" ? "FAC" : "STU"
-    if (form.id_number && !new RegExp(`^${prefix}-\\d{4,}$`).test(form.id_number.toUpperCase())) fields.id_number = `Use ${prefix}- followed by at least four digits.`
+    if (form.id_number && !/^\d{4,}$/.test(form.id_number)) fields.id_number = "Enter at least four digits, or leave blank to generate an ID."
     setCreateErrors(fields)
     setCreateError("")
     if (Object.keys(fields).length) return
@@ -4026,8 +3960,8 @@ function AdminUsersView({ roleFilter }: { roleFilter?: string }) {
         last_name: form.last_name.trim(),
         role_id: createType === "Faculty" ? "faculty" : "student",
         status: "active",
-        faculty_number: createType === "Faculty" ? form.id_number || undefined : undefined,
-        student_number: createType === "Student" ? form.id_number || undefined : undefined,
+        faculty_number: createType === "Faculty" && form.id_number ? `FAC-${form.id_number}` : undefined,
+        student_number: createType === "Student" && form.id_number ? `STU-${form.id_number}` : undefined,
         program: form.program || undefined,
       })
       setCreateType(null)
@@ -4197,12 +4131,28 @@ function AdminUsersView({ roleFilter }: { roleFilter?: string }) {
                 className={fieldClass}
               />
               <FieldError id="create-last_name-error" message={createErrors.last_name} />
-              <InputTag aria-label="id number" aria-invalid={!!createErrors.id_number} aria-describedby="create-id_number-error"
-                placeholder={createType === "Faculty" ? "FAC-0111 (blank to generate)" : "STU-0124 (blank to generate)"}
-                value={form.id_number}
-                onChange={(e) => { setForm((f) => ({ ...f, id_number: e.target.value })); setCreateErrors((f) => ({ ...f, id_number: "" })) } }
-                className={fieldClass}
-              />
+              <div>
+                <label htmlFor="create-id-digits" className="mb-1.5 block text-xs font-semibold text-slate-600">
+                  {createType === "Faculty" ? "Faculty ID" : "Student ID"}
+                </label>
+                <div className={`flex items-center overflow-hidden rounded-xl border bg-white focus-within:border-purple-600 focus-within:ring-[3px] focus-within:ring-purple-600/15 ${createErrors.id_number ? "border-rose-700" : "border-purple-200"}`}>
+                  <span className="self-stretch border-r border-purple-100 bg-purple-50 px-3.5 py-3 text-sm font-semibold text-purple-700" aria-hidden="true">
+                    {createType === "Faculty" ? "FAC-" : "STU-"}
+                  </span>
+                  <InputTag id="create-id-digits" aria-label={`${createType === "Faculty" ? "FAC-" : "STU-"} ID digits`}
+                    aria-invalid={!!createErrors.id_number} aria-describedby="create-id-help create-id_number-error"
+                    type="text" inputMode="numeric" pattern="[0-9]*" maxLength={96} autoComplete="off"
+                    placeholder="0124"
+                    value={form.id_number}
+                    onChange={(e) => {
+                      setForm((f) => ({ ...f, id_number: e.target.value.replace(/[^0-9]/g, "") }))
+                      setCreateErrors((f) => ({ ...f, id_number: "" }))
+                    }}
+                    className="min-w-0 w-full bg-white px-3.5 py-3 text-sm text-slate-800 outline-none"
+                  />
+                </div>
+                <p id="create-id-help" className="mt-1.5 text-xs text-slate-500">Enter at least four digits, or leave blank to generate a unique ID.</p>
+              </div>
               <FieldError id="create-id_number-error" message={createErrors.id_number} />
               <InputTag aria-label="email" aria-invalid={!!createErrors.email} aria-describedby="create-email-error"
                 type="email"
@@ -4941,6 +4891,6 @@ function PrivacyNotice() {
   return <details className="my-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
     <summary className="cursor-pointer font-semibold">Privacy and access to your data</summary>
     <p className="mt-3">FCAMS stores account details, schedules, appointment reasons, consultation summaries, and security audit activity to manage academic consultations. Students can access their own records; assigned faculty can access their consultations; administrators can manage accounts and view shared records and reports. Private faculty notes are available only to the assigned faculty through the app. Authorized database and backup operators can still access stored data.</p>
-    <p className="mt-3">Avoid including unnecessary sensitive information in appointment reasons. Contact your school administrator to request a correction, a copy of your information, or a retention/deletion review. No automatic deletion period is configured; the school must establish its retention policy before real student data is collected. Local demo email is captured in the Mailpit inbox, which anyone with access to this computer may view.</p>
+    <p className="mt-3">Avoid including unnecessary sensitive information in appointment reasons. Contact your school administrator to request a correction, a copy of your information, or a retention/deletion review. No automatic deletion period is configured; the school must establish its retention policy before real student data is collected. Verification and password-reset emails are delivered through the configured email provider. Check your inbox and spam folder.</p>
   </details>
 }

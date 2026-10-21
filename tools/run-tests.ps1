@@ -51,9 +51,12 @@ function Test-Mailpit {
     }
 }
 
+$php = Find-Php
+& $php (Join-Path $ProjectRoot 'tests\check-mail-fixture.php')
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 if (-not (Test-App) -or -not (Test-Mailpit)) {
     if ($SkipStart) {
-        throw 'FCAMS and Mailpit must be running for the API tests. Start FCAMS or omit -SkipStart.'
+        throw 'FCAMS must be running for the API tests. Start FCAMS or omit -SkipStart.'
     }
     Write-Host 'Starting FCAMS/Mailpit for the test run...'
     & (Join-Path $PSScriptRoot 'fcams-launcher.ps1') start -NoBrowser

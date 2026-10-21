@@ -21,8 +21,7 @@ spl_autoload_register(static function (string $class): void {
 /**
  * Send a transactional email using the configured SMTP transport.
  *
- * Local development defaults to Mailpit (127.0.0.1:1025). Set FCAMS_MAIL_*
- * environment variables to use a real SMTP provider.
+ * Local testing defaults to Mailpit. FCAMS_MAIL_* overrides are optional.
  *
  * @throws RuntimeException when delivery fails.
  */
@@ -51,6 +50,12 @@ function sendFcamsMail(
 
     if ($host === '') {
         throw new RuntimeException('Mail transport is not configured.');
+    }
+    if (!filter_var($fromEmail, FILTER_VALIDATE_EMAIL)) {
+        throw new RuntimeException('Configure a valid SMTP sender email address.');
+    }
+    if (!in_array($encryption, ['tls', 'ssl'], true) && !in_array($host, ['127.0.0.1', 'localhost', '::1'], true)) {
+        throw new RuntimeException('Remote SMTP requires tls or ssl encryption.');
     }
 
     $mail = new PHPMailer(true);

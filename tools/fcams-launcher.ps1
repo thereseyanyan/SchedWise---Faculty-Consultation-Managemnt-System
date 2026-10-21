@@ -262,12 +262,10 @@ function Ensure-LocalConfig {
     $config = Join-Path $BackendDir 'config.php'
     if (-not (Test-Path -LiteralPath $config)) {
         Copy-Item -LiteralPath (Join-Path $BackendDir 'config.example.php') -Destination $config
-        # Keep the localhost-only reset code available as a fallback if Mailpit
-        # is unavailable. The endpoint never exposes it to non-local clients.
         $content = Get-Content -LiteralPath $config -Raw
         $content = $content -replace "'debug'\s*=>\s*false", "'debug' => true"
         [System.IO.File]::WriteAllText($config, $content, [System.Text.UTF8Encoding]::new($false))
-        Write-Log 'Created backend/config.php from config.example.php (debug enabled for localhost).'
+        Write-Log 'Created local configuration with Mailpit testing defaults.'
     }
 
     $envFile = Join-Path $FrontendDir '.env'
@@ -389,55 +387,6 @@ function Ensure-FrontendDependencies {
     Write-Log 'Frontend dependencies installed.'
 }
 
-function Ensure-Mailpit {
-    if (Test-Port -Port 1025) {
-        Write-Log 'SMTP is already listening on port 1025.'
-        return $null
-    }
-
-    if (-not (Test-Path -LiteralPath $MailpitExe)) {
-        Write-Log 'Downloading Mailpit (local email inbox) from GitHub.'
-        New-Item -ItemType Directory -Force -Path $MailpitDir | Out-Null
-        $zip = Join-Path $MailpitDir 'mailpit.zip'
-        try {
-            Invoke-WebRequest `
-                -Uri 'https://github.com/axllent/mailpit/releases/download/v1.31.6/mailpit-windows-amd64.zip' `
-                -OutFile $zip `
-                -UseBasicParsing `
-                -TimeoutSec 180
-            Expand-Archive -LiteralPath $zip -DestinationPath $MailpitDir -Force
-            Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue
-            Write-Log 'Mailpit downloaded.'
-        } catch {
-            Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue
-            throw "Mailpit could not be downloaded: $($_.Exception.Message)"
-        }
-    }
-
-    $database = Join-Path $MailpitDir 'mailpit.db'
-    $outLog = Join-Path $LogDir 'mailpit.out.log'
-    $errLog = Join-Path $LogDir 'mailpit.err.log'
-    $process = Start-Process -FilePath $MailpitExe `
-        -ArgumentList @(
-            '--smtp', '127.0.0.1:1025',
-            '--listen', '127.0.0.1:8025',
-            '--database', "`"$database`"",
-            '--disable-version-check'
-        ) `
-        -WorkingDirectory $MailpitDir `
-        -WindowStyle Hidden `
-        -RedirectStandardOutput $outLog `
-        -RedirectStandardError $errLog `
-        -PassThru
-
-    if (-not (Wait-Port -Port 1025 -TimeoutSeconds 15)) {
-        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-        throw 'Mailpit did not start on port 1025.'
-    }
-
-    Write-Log "Started Mailpit (PID $($process.Id)). Inbox: http://localhost:8025"
-    return $process
-}
 
 function Start-Backend {
     param([string]$Php)
@@ -461,6 +410,21 @@ function Start-Backend {
         -RedirectStandardError $errLog `
         -PassThru
     Write-Log "Started PHP API (PID $($process.Id))."
+    return $process
+}
+
+function Ensure-Mailpit {
+    if (Test-Port -Port 1025) { Write-Log 'SMTP is already listening on port 1025.'; return $null }
+    if (-not (Test-Path -LiteralPath $MailpitExe)) {
+        New-Item -ItemType Directory -Force -Path $MailpitDir | Out-Null
+        $zip = Join-Path $MailpitDir 'mailpit.zip'
+        Write-Log 'Downloading Mailpit for local email testing.'
+        Invoke-WebRequest -Uri 'https://github.com/axllent/mailpit/releases/download/v1.31.6/mailpit-windows-amd64.zip' -OutFile $zip -UseBasicParsing
+        Expand-Archive -LiteralPath $zip -DestinationPath $MailpitDir -Force
+    }
+    $process = Start-Process -FilePath $MailpitExe -ArgumentList @('--listen', '127.0.0.1:8025', '--smtp', '127.0.0.1:1025', '--database', ('"' + (Join-Path $MailpitDir 'mailpit.db') + '"')) -WorkingDirectory $MailpitDir -WindowStyle Hidden -RedirectStandardOutput (Join-Path $LogDir 'mailpit.out.log') -RedirectStandardError (Join-Path $LogDir 'mailpit.err.log') -PassThru
+    if (-not (Wait-Port -Port 1025 -TimeoutSeconds 10)) { throw 'Mailpit did not start on port 1025.' }
+    Write-Log "Started local Mailpit (PID $($process.Id))."
     return $process
 }
 
@@ -569,11 +533,9 @@ try {
         $frontendProcess = Start-Frontend -Node $node
     }
 
-    try {
-        $mailpitProcess = Ensure-Mailpit
-    } catch {
-        Show-Warning "Email delivery is unavailable. Password-reset codes will still appear on localhost.`n`n$($_.Exception.Message)"
-    }
+
+    try { $mailpitProcess = Ensure-Mailpit }
+    catch { Show-Warning "Local email testing is unavailable. $($_.Exception.Message)" }
 
     if ($backendProcess -or $frontendProcess -or $mailpitProcess) {
         Save-TrackedProcesses -BackendProcess $backendProcess -FrontendProcess $frontendProcess -MailpitProcess $mailpitProcess

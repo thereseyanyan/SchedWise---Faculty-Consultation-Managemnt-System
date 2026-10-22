@@ -50,6 +50,12 @@ $appointmentStatement = $pdo->prepare(
 $appointmentStatement->execute([...$userIds, ...$userIds]);
 $appointmentIds = array_column($appointmentStatement->fetchAll(PDO::FETCH_ASSOC), 'id');
 
+$overrideStatement = $pdo->prepare(
+    "SELECT id FROM schedule_overrides WHERE faculty_id IN ($userPlaceholders)"
+);
+$overrideStatement->execute($userIds);
+$overrideIds = array_column($overrideStatement->fetchAll(PDO::FETCH_ASSOC), 'id');
+
 $appointmentPlaceholders = $appointmentIds === []
     ? null
     : implode(',', array_fill(0, count($appointmentIds), '?'));
@@ -79,7 +85,7 @@ if ($appointmentIds !== []) {
 
 // Audit rows are protected by a foreign key to the actor. Remove them before
 // the test user, including any rows attached to test appointments.
-$auditEntityIds = [...$userIds, ...$appointmentIds];
+$auditEntityIds = [...$userIds, ...$appointmentIds, ...$overrideIds];
 $auditPlaceholders = implode(',', array_fill(0, count($auditEntityIds), '?'));
 $pdo->prepare(
     "DELETE FROM audit_logs WHERE actor_user_id IN ($userPlaceholders)
@@ -95,8 +101,9 @@ $pdo->exec('DELETE FROM rate_limits');
 fwrite(
     STDOUT,
     sprintf(
-        "Removed %d test user(s), %d test appointment(s), and local rate-limit counters.\n",
+        "Removed %d test user(s), %d test appointment(s), %d schedule override(s), and local rate-limit counters.\n",
         count($userIds),
-        count($appointmentIds)
+        count($appointmentIds),
+        count($overrideIds)
     )
 );

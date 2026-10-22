@@ -36,13 +36,9 @@ try {
         ':end_date' => $endDate,
     ];
 
-    if ($user['role_id'] === 'student') {
-        $whereConditions[] = 'a.student_id = :student_id';
-        $params[':student_id'] = $user['id'];
-    } elseif ($user['role_id'] === 'faculty') {
-        $whereConditions[] = 'a.faculty_id = :faculty_id';
-        $params[':faculty_id'] = $user['id'];
-    }
+    [$scopeConditions, $scopeParams] = reportScopeFilters($pdo, $user, $_GET);
+    $whereConditions = array_merge($whereConditions, $scopeConditions);
+    $params = array_merge($params, $scopeParams);
 
     $whereClause = 'WHERE ' . implode(' AND ', $whereConditions);
     $stats = [];
@@ -96,20 +92,19 @@ try {
              FROM appointments a
              JOIN users u ON a.faculty_id = u.id
              LEFT JOIN user_profiles up ON u.id = up.user_id
-             WHERE a.appointment_date BETWEEN :start_date AND :end_date
+             {$whereClause}
              GROUP BY u.id, up.first_name, up.last_name
              ORDER BY appointment_count DESC
              LIMIT 5"
         );
-        $statement->execute([
-            ':start_date' => $startDate,
-            ':end_date' => $endDate,
-        ]);
+        $statement->execute($params);
         $stats['top_faculty'] = $statement->fetchAll();
     }
 
     if ($user['role_id'] === 'faculty' || $user['role_id'] === 'admin') {
-        $facultyId = $user['role_id'] === 'faculty' ? $user['id'] : ($params[':faculty_id'] ?? $user['id']);
+        $facultyId = $user['role_id'] === 'faculty'
+            ? $user['id']
+            : ($params[':report_faculty_id'] ?? $user['id']);
         if ($user['role_id'] === 'faculty') {
             $statement = $pdo->prepare(
                 "SELECT
@@ -143,6 +138,10 @@ try {
             'month' => $month,
             'start_date' => $startDate,
             'end_date' => $endDate,
+        ],
+        'filters' => [
+            'faculty_id' => $params[':report_faculty_id'] ?? null,
+            'department_id' => $params[':report_department_id'] ?? null,
         ],
         'statistics' => $stats,
     ]);

@@ -30,37 +30,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
     // Apply role-based filtering
     if ($user['role_id'] === 'student') {
-        $whereConditions[] = 'student_id = :student_id';
+        $whereConditions[] = 'a.student_id = :student_id';
         $params[':student_id'] = $user['id'];
     } elseif ($user['role_id'] === 'faculty') {
-        $whereConditions[] = 'faculty_id = :faculty_id';
+        $whereConditions[] = 'a.faculty_id = :faculty_id';
         $params[':faculty_id'] = $user['id'];
     }
     // Admin can see all (no additional filter needed)
 
     // Apply explicit filters if provided (and user has permission)
     if ($studentId && ($user['role_id'] === 'admin' || $user['role_id'] === 'faculty')) {
-        $whereConditions[] = 'student_id = :filter_student_id';
+        $whereConditions[] = 'a.student_id = :filter_student_id';
         $params[':filter_student_id'] = $studentId;
     }
 
     if ($facultyId && ($user['role_id'] === 'admin' || $user['role_id'] === 'student')) {
-        $whereConditions[] = 'faculty_id = :filter_faculty_id';
+        $whereConditions[] = 'a.faculty_id = :filter_faculty_id';
         $params[':filter_faculty_id'] = $facultyId;
     }
 
     if ($status) {
-        $whereConditions[] = 'status = :status';
+        $whereConditions[] = 'a.status = :status';
         $params[':status'] = $status;
     }
 
     if ($dateFrom) {
-        $whereConditions[] = 'appointment_date >= :date_from';
+        $whereConditions[] = 'a.appointment_date >= :date_from';
         $params[':date_from'] = $dateFrom;
     }
 
     if ($dateTo) {
-        $whereConditions[] = 'appointment_date <= :date_to';
+        $whereConditions[] = 'a.appointment_date <= :date_to';
         $params[':date_to'] = $dateTo;
     }
 
@@ -68,7 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
     // Prepare and execute query
     $statement = $pdo->prepare(
-        "SELECT a.*,
+        "SELECT a.*, cr.summary,
                 uf.first_name AS faculty_first_name, uf.last_name AS faculty_last_name,
                 uf.faculty_number AS faculty_number,
                 us.first_name AS student_first_name, us.last_name AS student_last_name,
@@ -76,6 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
          FROM appointments a
          LEFT JOIN user_profiles uf ON a.faculty_id = uf.user_id
          LEFT JOIN user_profiles us ON a.student_id = us.user_id
+         LEFT JOIN consultation_records cr ON cr.appointment_id = a.id
          {$whereClause}
          ORDER BY a.appointment_date, a.start_minutes"
     );

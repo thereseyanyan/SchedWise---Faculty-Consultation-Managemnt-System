@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
-    [switch]$SkipStart
+    [switch]$SkipStart,
+    [switch]$SkipBrowser
 )
 
 $ErrorActionPreference = 'Stop'
@@ -56,19 +57,38 @@ $php = Find-Php
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 if (-not (Test-App) -or -not (Test-Mailpit)) {
     if ($SkipStart) {
-        throw 'FCAMS must be running for the API tests. Start FCAMS or omit -SkipStart.'
+        throw 'SchedWise must be running for the API tests. Start SchedWise or omit -SkipStart.'
     }
-    Write-Host 'Starting FCAMS/Mailpit for the test run...'
-    & (Join-Path $PSScriptRoot 'fcams-launcher.ps1') start -NoBrowser
+    Write-Host 'Starting SchedWise/Mailpit for the test run...'
+    & (Join-Path $PSScriptRoot 'schedwise-launcher.ps1') start -NoBrowser
     if ($LASTEXITCODE -ne 0 -or -not (Test-App) -or -not (Test-Mailpit)) {
-        throw 'FCAMS or Mailpit did not start. Check .runtime/logs/launcher.log.'
+        throw 'SchedWise or Mailpit did not start. Check .runtime/logs/launcher.log.'
     }
 }
 
 $php = Find-Php
 $node = Find-Node
-$env:FCAMS_PHP = $php
+$env:SCHEDWISE_PHP = $php
 
-Write-Host 'Running FCAMS API tests...'
+Write-Host 'Running SchedWise API tests...'
 & $node --test $TestFile
+if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+}
+
+if (-not $SkipBrowser) {
+    $playwright = Join-Path $ProjectRoot 'frontend\node_modules\playwright-core'
+    if (-not (Test-Path -LiteralPath $playwright)) {
+        Write-Host 'Skipping browser smoke test because frontend dependencies are not installed.'
+        exit 0
+    }
+    Write-Host 'Running SchedWise browser smoke test...'
+    Push-Location (Join-Path $ProjectRoot 'frontend')
+    try {
+        & $node --test 'tests\browser-smoke.test.mjs'
+    } finally {
+        Pop-Location
+    }
+}
+
 exit $LASTEXITCODE

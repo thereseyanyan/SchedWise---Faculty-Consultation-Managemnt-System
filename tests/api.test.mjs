@@ -5,12 +5,12 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import test from "node:test";
 
-const BASE_URL = (process.env.FCAMS_BASE_URL || "http://localhost:5173/api").replace(/\/$/, "");
-const MAILPIT_URL = (process.env.FCAMS_MAILPIT_URL || "http://127.0.0.1:8025").replace(/\/$/, "");
+const BASE_URL = (process.env.SCHEDWISE_BASE_URL || "http://localhost:5173/api").replace(/\/$/, "");
+const MAILPIT_URL = (process.env.SCHEDWISE_MAILPIT_URL || "http://127.0.0.1:8025").replace(/\/$/, "");
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const CLEANUP_SCRIPT = path.join(ROOT, "tools", "test-cleanup.php");
 const PHP =
-  process.env.FCAMS_PHP ||
+  process.env.SCHEDWISE_PHP ||
   (existsSync("C:\\xampp\\php\\php.exe") ? "C:\\xampp\\php\\php.exe" : "php");
 
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -139,10 +139,10 @@ async function findVerificationLink(email) {
   throw new Error(`No verification email found for ${email}. Is Mailpit running?`);
 }
 
-test("FCAMS API regression suite", async (t) => {
+test("SchedWise API regression suite", async (t) => {
   const runId = `${Date.now()}.${Math.random().toString(36).slice(2, 8)}`;
   const emailPrefix = `e2e.${runId}`;
-  const email = `${emailPrefix}@fcams.edu`;
+  const email = `${emailPrefix}@schedwise.edu`;
   const initialPassword = "Test1234!";
   const newPassword = "NewTest1234!";
   const finalPassword = "FinalTest1234!";
@@ -169,14 +169,14 @@ test("FCAMS API regression suite", async (t) => {
 
     await t.test("login, CSRF enforcement, and logout", async () => {
       const admin = new ApiClient();
-      const login = await admin.login("admin@fcams.edu", "Admin123!");
+      const login = await admin.login("admin@schedwise.edu", "Admin123!");
       assert.equal(login.status, 200, login.text);
       assert.equal(login.payload?.data?.user?.role_id, "admin");
       assert.ok(admin.csrf);
 
       const me = await admin.request("/auth/me.php");
       assert.equal(me.status, 200, me.text);
-      assert.equal(me.payload?.data?.user?.email, "admin@fcams.edu");
+      assert.equal(me.payload?.data?.user?.email, "admin@schedwise.edu");
 
       const withoutCsrf = await admin.request("/auth/logout.php", {
         method: "POST",
@@ -190,10 +190,86 @@ test("FCAMS API regression suite", async (t) => {
 
     await t.test("admin-only user listing rejects a student", async () => {
       const student = new ApiClient();
-      const login = await student.login("juan.delacruz@fcams.edu", "Passw0rd!");
+      const login = await student.login("juan.delacruz@schedwise.edu", "Passw0rd!");
       assert.equal(login.status, 200, login.text);
       const users = await student.request("/users/index.php");
       assert.equal(users.status, 403);
+    });
+
+    await t.test("audit log is admin-only, paginated, and filterable", async () => {
+      const admin = new ApiClient();
+      const adminLogin = await admin.login("admin@schedwise.edu", "Admin123!");
+      assert.equal(adminLogin.status, 200, adminLogin.text);
+
+      const page = await admin.request("/audit/index.php?per_page=10&q=login");
+      assert.equal(page.status, 200, page.text);
+      assert.ok(Array.isArray(page.payload?.data?.entries));
+      assert.ok(page.payload?.data?.pagination?.total >= 1);
+      assert.ok(page.payload?.data?.pagination?.per_page === 10);
+      assert.ok(page.payload?.data?.pagination?.total_pages >= 1);
+      assert.ok(page.payload?.data?.options?.actions?.includes("login"));
+
+      const filtered = await admin.request("/audit/index.php?action=login&per_page=10");
+      assert.equal(filtered.status, 200, filtered.text);
+      assert.ok(filtered.payload?.data?.entries?.every((entry) => entry.action === "login"));
+
+      const badDate = await admin.request("/audit/index.php?date_from=not-a-date");
+      assert.equal(badDate.status, 400);
+
+      const student = new ApiClient();
+      const studentLogin = await student.login("juan.delacruz@schedwise.edu", "Passw0rd!");
+      assert.equal(studentLogin.status, 200, studentLogin.text);
+      const denied = await student.request("/audit/index.php");
+      assert.equal(denied.status, 403);
+    });
+
+    await t.test("admin reports support department, faculty, and date filters", async () => {
+      const admin = new ApiClient();
+      assert.equal((await admin.login("admin@schedwise.edu", "Admin123!")).status, 200);
+
+      const faculty = new ApiClient();
+      const facultyLogin = await faculty.login("elena.cruz@schedwise.edu", "Passw0rd!");
+      assert.equal(facultyLogin.status, 200, facultyLogin.text);
+      const facultyId = facultyLogin.payload.data.user.id;
+
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1;
+      const monthParam = `${year}-${String(month).padStart(2, "0")}`;
+
+      const byFaculty = await admin.request(
+        `/reports/summary.php?year=${year}&month=${month}&faculty_id=${encodeURIComponent(facultyId)}`,
+      );
+      assert.equal(byFaculty.status, 200, byFaculty.text);
+      assert.equal(byFaculty.payload?.data?.filters?.faculty_id, facultyId);
+      assert.ok(
+        byFaculty.payload?.data?.statistics?.top_faculty?.every(
+          (row) => row.id === facultyId,
+        ),
+      );
+
+      const byDepartment = await admin.request(
+        `/reports/summary.php?year=${year}&month=${month}&department_id=ccs`,
+      );
+      assert.equal(byDepartment.status, 200, byDepartment.text);
+      assert.equal(byDepartment.payload?.data?.filters?.department_id, "ccs");
+
+      const monthly = await admin.request(
+        `/reports/monthly.php?months=3&end_month=${monthParam}&faculty_id=${encodeURIComponent(facultyId)}`,
+      );
+      assert.equal(monthly.status, 200, monthly.text);
+      assert.equal(monthly.payload?.data?.end_month, monthParam);
+      assert.equal(monthly.payload?.data?.series?.length, 3);
+      assert.equal(monthly.payload?.data?.filters?.faculty_id, facultyId);
+
+      const exported = await admin.request(
+        `/reports/export.php?year=${year}&month=${month}&faculty_id=${encodeURIComponent(facultyId)}&format=json`,
+      );
+      assert.equal(exported.status, 200, exported.text);
+      assert.equal(exported.payload?.data?.filters?.faculty_id, facultyId);
+
+      const invalid = await admin.request("/reports/summary.php?department_id=not-a-department");
+      assert.equal(invalid.status, 400);
     });
 
     await t.test("registration rejects weak passwords and unknown departments", async () => {
@@ -331,6 +407,135 @@ test("FCAMS API regression suite", async (t) => {
       assert.equal(reused.status, 400);
     });
 
+    await t.test("faculty self-registration is unique, verified, and admin-approved", async () => {
+      const facultyEmail = `${emailPrefix}.self-faculty@schedwise.edu`;
+      const rejectedEmail = `${emailPrefix}.rejected-faculty@schedwise.edu`;
+
+      const registerFaculty = (facultyAddress) =>
+        new ApiClient().request("/auth/register.php", {
+          method: "POST",
+          csrf: false,
+          body: {
+            email: facultyAddress,
+            password: initialPassword,
+            first_name: "Automated",
+            last_name: "Faculty",
+            role_id: "faculty",
+            department_id: "ccs",
+          },
+        });
+
+      const register = await registerFaculty(facultyEmail);
+      assert.equal(register.status, 201, register.text);
+      assert.equal(register.payload?.data?.approval_required, true);
+      assert.equal(register.payload?.data?.student_number, null);
+      assert.match(register.payload?.data?.faculty_number || "", /^FAC-\d{4,}$/);
+      const facultyNumber = register.payload.data.faculty_number;
+
+      const unverifiedLogin = await new ApiClient().login(facultyEmail, initialPassword);
+      assert.equal(unverifiedLogin.status, 403);
+      assert.equal(unverifiedLogin.payload?.code, "email_unverified");
+
+      const admin = new ApiClient();
+      assert.equal((await admin.login("admin@schedwise.edu", "Admin123!")).status, 200);
+      const pendingFaculty = async () => {
+        const listed = await admin.request("/users/index.php?role_id=faculty&status=pending");
+        assert.equal(listed.status, 200, listed.text);
+        return listed.payload.data.find((row) => row.email === facultyEmail);
+      };
+      const pending = await pendingFaculty();
+      assert.ok(pending, "Self-registered faculty was not listed as pending");
+      assert.equal(pending.faculty_approval_status, "pending");
+      assert.equal(pending.email_verified_at, null);
+
+      const earlyApproval = await admin.request(
+        `/users/index.php?id=${encodeURIComponent(pending.id)}`,
+        { method: "PUT", body: { faculty_approval_action: "approve" } },
+      );
+      assert.equal(earlyApproval.status, 400, earlyApproval.text);
+      assert.equal(earlyApproval.payload?.code, "faculty_email_unverified");
+
+      const verificationLink = await findVerificationLink(facultyEmail);
+      const verificationToken = new URL(verificationLink).searchParams.get("verify_token");
+      assert.ok(verificationToken);
+      const verified = await new ApiClient().request("/auth/verify-email.php", {
+        method: "POST",
+        csrf: false,
+        body: { token: verificationToken },
+      });
+      assert.equal(verified.status, 200, verified.text);
+      assert.match(verified.payload?.data?.message || "", /awaiting administrator approval/i);
+
+      const reusedVerification = await new ApiClient().request("/auth/verify-email.php", {
+        method: "POST",
+        csrf: false,
+        body: { token: verificationToken },
+      });
+      assert.equal(reusedVerification.status, 200, reusedVerification.text);
+      assert.match(reusedVerification.payload?.data?.message || "", /awaiting administrator approval/i);
+
+      const awaitingLogin = await new ApiClient().login(facultyEmail, initialPassword);
+      assert.equal(awaitingLogin.status, 403);
+      assert.equal(awaitingLogin.payload?.code, "faculty_approval_pending");
+
+      const verifiedPending = await pendingFaculty();
+      assert.ok(verifiedPending?.email_verified_at);
+
+      const approved = await admin.request(
+        `/users/index.php?id=${encodeURIComponent(verifiedPending.id)}`,
+        { method: "PUT", body: { faculty_approval_action: "approve" } },
+      );
+      assert.equal(approved.status, 200, approved.text);
+      assert.equal(approved.payload?.data?.status, "active");
+      assert.equal(approved.payload?.data?.faculty_approval_status, "approved");
+      assert.ok(
+        (await matchingMessages(facultyEmail, /faculty account has been approved/i)).length > 0,
+        "Approval decision email was not delivered to Mailpit",
+      );
+
+      const approvedLogin = await new ApiClient().login(facultyEmail, initialPassword);
+      assert.equal(approvedLogin.status, 200, approvedLogin.text);
+      assert.equal(approvedLogin.payload?.data?.user?.role_id, "faculty");
+      assert.equal(approvedLogin.payload?.data?.user?.faculty_number, facultyNumber);
+
+      const rejectedRegistration = await registerFaculty(rejectedEmail);
+      assert.equal(rejectedRegistration.status, 201, rejectedRegistration.text);
+      assert.notEqual(
+        rejectedRegistration.payload?.data?.faculty_number,
+        facultyNumber,
+        "Faculty registrations must receive unique IDs.",
+      );
+
+      const rejectedLink = await findVerificationLink(rejectedEmail);
+      const rejectedToken = new URL(rejectedLink).searchParams.get("verify_token");
+      assert.ok(rejectedToken);
+      assert.equal((await new ApiClient().request("/auth/verify-email.php", {
+        method: "POST",
+        csrf: false,
+        body: { token: rejectedToken },
+      })).status, 200);
+
+      const rejectedList = await admin.request("/users/index.php?role_id=faculty&status=pending");
+      const rejectedUser = rejectedList.payload.data.find((row) => row.email === rejectedEmail);
+      assert.ok(rejectedUser);
+
+      const rejected = await admin.request(
+        `/users/index.php?id=${encodeURIComponent(rejectedUser.id)}`,
+        { method: "PUT", body: { faculty_approval_action: "reject" } },
+      );
+      assert.equal(rejected.status, 200, rejected.text);
+      assert.equal(rejected.payload?.data?.status, "disabled");
+      assert.equal(rejected.payload?.data?.faculty_approval_status, "rejected");
+      assert.ok(
+        (await matchingMessages(rejectedEmail, /faculty registration was not approved/i)).length > 0,
+        "Rejection decision email was not delivered to Mailpit",
+      );
+
+      const rejectedLogin = await new ApiClient().login(rejectedEmail, initialPassword);
+      assert.equal(rejectedLogin.status, 403);
+      assert.equal(rejectedLogin.payload?.code, "faculty_approval_rejected");
+    });
+
     await t.test("student can book an available slot and cannot spoof another student", async () => {
       const student = new ApiClient();
       const login = await student.login(email, newPassword);
@@ -452,19 +657,28 @@ test("FCAMS API regression suite", async (t) => {
         assert.equal(Object.hasOwn(member, "faculty_number"), false);
       }
       const faculty = new ApiClient();
-      assert.equal((await faculty.login("elena.cruz@fcams.edu", "Passw0rd!")).status, 200);
+      assert.equal((await faculty.login("elena.cruz@schedwise.edu", "Passw0rd!")).status, 200);
       const appointments = await student.request("/appointments/index.php");
       const appointment = appointments.payload.data.find(row => row.topic === "Automated test appointment");
       assert.ok(appointment);
       const id = encodeURIComponent(appointment.id);
       assert.equal((await faculty.request(`/appointments/approve.php?id=${id}`, { method: "PUT" })).status, 200);
+      const earlyNoShow = await faculty.request(`/appointments/no-show.php?id=${id}`, { method: "PUT" });
+      assert.equal(earlyNoShow.status, 400, earlyNoShow.text);
+      assert.match(earlyNoShow.payload?.error || "", /after the consultation has ended/i);
       assert.equal((await faculty.request(`/appointments/complete.php?id=${id}`, { method: "PUT" })).status, 200);
       const created = await faculty.request("/consultations/index.php", { method: "POST", body: {
         appointment_id: appointment.id, summary: "Shared follow-up instructions", private_notes: "Confidential faculty information"
       }});
       assert.equal(created.status, 201, created.text);
+      const refreshedAppointments = await student.request("/appointments/index.php");
+      assert.equal(refreshedAppointments.status, 200, refreshedAppointments.text);
+      const refreshedRow = refreshedAppointments.payload.data.find(row => row.id === appointment.id);
+      assert.equal(refreshedRow.summary, "Shared follow-up instructions");
+      assert.equal(Object.hasOwn(refreshedRow, "private_notes"), false);
+      assert.equal(Object.hasOwn(refreshedRow, "action_items"), false);
       const admin = new ApiClient();
-      assert.equal((await admin.login("admin@fcams.edu", "Admin123!")).status, 200);
+      assert.equal((await admin.login("admin@schedwise.edu", "Admin123!")).status, 200);
       for (const client of [student, admin]) {
         const records = await client.request(`/consultations/index.php?appointment_id=${id}`);
         assert.equal(records.status, 200, records.text);
@@ -475,14 +689,14 @@ test("FCAMS API regression suite", async (t) => {
       const own = await faculty.request(`/consultations/index.php?appointment_id=${id}`);
       assert.equal(own.payload.data[0].private_notes, "Confidential faculty information");
       const outsider = new ApiClient();
-      assert.equal((await outsider.login("juan.delacruz@fcams.edu", "Passw0rd!")).status, 200);
+      assert.equal((await outsider.login("juan.delacruz@schedwise.edu", "Passw0rd!")).status, 200);
       const hidden = await outsider.request(`/consultations/index.php?appointment_id=${id}`);
       assert.deepEqual(hidden.payload.data, []);
     });
     await t.test('account IDs, field errors, permanent roles, and deletion', async () => {
       const admin = new ApiClient();
-      assert.equal((await admin.login('admin@fcams.edu', 'Admin123!')).status, 200);
-      const profile = { email: `${emailPrefix}.faculty@fcams.edu`, password: initialPassword,
+      assert.equal((await admin.login('admin@schedwise.edu', 'Admin123!')).status, 200);
+      const profile = { email: `${emailPrefix}.faculty@schedwise.edu`, password: initialPassword,
         first_name: 'Test', last_name: 'Faculty', role_id: 'faculty' };
       const invalid = await admin.request('/users/index.php', { method: 'POST', body: { ...profile, email: 'bad', password: 'weak' } });
       assert.equal(invalid.status, 400, invalid.text);
@@ -508,7 +722,7 @@ test("FCAMS API regression suite", async (t) => {
       assert.equal(duplicateEmail.status, 409);
       assert.ok(duplicateEmail.payload.fields.email);
       const duplicateId = await admin.request('/users/index.php', { method: 'POST', body: { ...profile,
-        email: `${emailPrefix}.duplicate@fcams.edu`, faculty_number: account.payload.data.faculty_number,
+        email: `${emailPrefix}.duplicate@schedwise.edu`, faculty_number: account.payload.data.faculty_number,
       }});
       assert.equal(duplicateId.status, 409, duplicateId.text);
       assert.ok(duplicateId.payload.fields.faculty_number);
@@ -529,9 +743,9 @@ test("FCAMS API regression suite", async (t) => {
 
     await t.test('bookable slots respect custom availability, blocked ranges, and weekends', async () => {
       const admin = new ApiClient();
-      assert.equal((await admin.login('admin@fcams.edu', 'Admin123!')).status, 200);
+      assert.equal((await admin.login('admin@schedwise.edu', 'Admin123!')).status, 200);
       const created = await admin.request('/users/index.php', { method: 'POST', body: {
-        email: `${emailPrefix}.slots@fcams.edu`, password: initialPassword,
+        email: `${emailPrefix}.slots@schedwise.edu`, password: initialPassword,
         first_name: 'Test', last_name: 'Slots', role_id: 'faculty',
       }});
       assert.equal(created.status, 201, created.text);
@@ -562,7 +776,7 @@ test("FCAMS API regression suite", async (t) => {
       const booking = await student.request('/appointments/index.php', { method: 'POST', body });
       assert.equal(booking.status, 201, booking.text);
       const other = await admin.request('/users/index.php', { method: 'POST', body: {
-        email: `${emailPrefix}.other-slots@fcams.edu`, password: initialPassword,
+        email: `${emailPrefix}.other-slots@schedwise.edu`, password: initialPassword,
         first_name: 'Other', last_name: 'Faculty', role_id: 'faculty',
       }});
       assert.equal(other.status, 201, other.text);
@@ -592,6 +806,17 @@ test("FCAMS API regression suite", async (t) => {
         method: 'PUT', body: { appointment_date: iso, start_minutes: 600, end_minutes: 630 },
       });
       assert.equal(rescheduledOverlap.status, 409, rescheduledOverlap.text);
+      const rescheduleRequest = await student.request(`/appointments/reschedule.php?id=${differentFaculty.payload.data.id}`, {
+        method: 'PUT', body: { appointment_date: iso, start_minutes: 660, end_minutes: 690, reason: 'Requested a later time' },
+      });
+      assert.equal(rescheduleRequest.status, 200, rescheduleRequest.text);
+      assert.equal(rescheduleRequest.payload?.data?.status, 'reschedule_requested');
+      const otherFaculty = new ApiClient();
+      assert.equal((await otherFaculty.login(`${emailPrefix}.other-slots@schedwise.edu`, initialPassword)).status, 200);
+      const approvedReschedule = await otherFaculty.request(`/appointments/approve.php?id=${differentFaculty.payload.data.id}`, { method: 'PUT' });
+      assert.equal(approvedReschedule.status, 200, approvedReschedule.text);
+      assert.equal(approvedReschedule.payload?.data?.status, 'confirmed');
+      assert.equal(Number(approvedReschedule.payload?.data?.start_minutes), 660);
       const after = await student.request('/faculty/slots.php');
       assert.equal(after.payload.data.some((slot) => slot.faculty_id === facultyId && slot.date === iso && slot.start_minutes === 600), false);
       // Deletion preserves this booking, but removes the faculty from future booking choices.
@@ -601,6 +826,207 @@ test("FCAMS API regression suite", async (t) => {
       const history = await student.request('/appointments/index.php');
       assert.equal(history.payload.data.some((a) => a.id === booking.payload.data.id), true);
     });
+    await t.test('appointment transitions and reschedule guard rails', async () => {
+      const admin = new ApiClient();
+      assert.equal((await admin.login('admin@schedwise.edu', 'Admin123!')).status, 200);
+
+      const facultyEmail = `${emailPrefix}.transitions-faculty@schedwise.edu`;
+      const studentEmail = `${emailPrefix}.transitions-student@schedwise.edu`;
+      const otherEmail = `${emailPrefix}.transitions-other@schedwise.edu`;
+      const createUser = async (body) => {
+        const response = await admin.request('/users/index.php', { method: 'POST', body: {
+          password: initialPassword, status: 'active', ...body,
+        } });
+        assert.equal(response.status, 201, response.text);
+        return response.payload.data.user_id;
+      };
+      const facultyId = await createUser({
+        email: facultyEmail, first_name: 'Transition', last_name: 'Faculty', role_id: 'faculty',
+      });
+      const studentId = await createUser({
+        email: studentEmail, first_name: 'Transition', last_name: 'Student', role_id: 'student',
+      });
+      await createUser({
+        email: otherEmail, first_name: 'Other', last_name: 'Student', role_id: 'student',
+      });
+
+      const faculty = new ApiClient();
+      assert.equal((await faculty.login(facultyEmail, initialPassword)).status, 200);
+      const student = new ApiClient();
+      assert.equal((await student.login(studentEmail, initialPassword)).status, 200);
+      const other = new ApiClient();
+      const otherLogin = await other.login(otherEmail, initialPassword);
+      assert.equal(otherLogin.status, 200, otherLogin.text);
+      const otherId = otherLogin.payload.data.user.id;
+
+      const date = new Date();
+      date.setDate(date.getDate() + 21);
+      while (date.getDay() === 0 || date.getDay() === 6) date.setDate(date.getDate() + 1);
+      const iso = localDate(date);
+      const available = await admin.request('/faculty/schedule_overrides.php', { method: 'POST', body: {
+        faculty_id: facultyId, date: iso, kind: 'available', start_minutes: 540, end_minutes: 720,
+      } });
+      assert.equal(available.status, 201, available.text);
+
+      const book = (start, end, topic, client = student, ownerId = studentId) =>
+        client.request('/appointments/index.php', { method: 'POST', body: {
+          student_id: ownerId, faculty_id: facultyId, appointment_date: iso,
+          start_minutes: start, end_minutes: end, topic, reason: 'State-transition regression test.',
+        } });
+      const transition = (id, action, body) =>
+        faculty.request(`/appointments/${action}.php?id=${encodeURIComponent(id)}`, {
+          method: 'PUT', body,
+        });
+
+      const pending = await book(540, 570, 'Pending transition');
+      assert.equal(pending.status, 201, pending.text);
+      const pendingId = pending.payload.data.id;
+      assert.equal((await student.request(`/appointments/approve.php?id=${encodeURIComponent(pendingId)}`, { method: 'PUT' })).status, 403);
+      assert.equal((await transition(pendingId, 'complete')).status, 400);
+      assert.equal((await transition(pendingId, 'no-show')).status, 400);
+      const rejectWithoutReason = await transition(pendingId, 'reject', { reason: '' });
+      assert.equal(rejectWithoutReason.status, 400, rejectWithoutReason.text);
+      assert.match(rejectWithoutReason.payload.error, /reason is required/i);
+      const cancelWithoutReason = await student.request(`/appointments/cancel.php?id=${encodeURIComponent(pendingId)}`, {
+        method: 'PUT', body: { reason: '' },
+      });
+      assert.equal(cancelWithoutReason.status, 400, cancelWithoutReason.text);
+      assert.match(cancelWithoutReason.payload.error, /reason is required/i);
+      const cancelled = await student.request(`/appointments/cancel.php?id=${encodeURIComponent(pendingId)}`, {
+        method: 'PUT', body: { reason: 'No longer needed' },
+      });
+      assert.equal(cancelled.status, 200, cancelled.text);
+      assert.equal(cancelled.payload.data.status, 'cancelled');
+      assert.equal((await transition(pendingId, 'approve')).status, 400);
+      assert.equal((await transition(pendingId, 'reschedule', {
+        appointment_date: iso, start_minutes: 570, end_minutes: 600,
+      })).status, 400);
+      assert.equal((await student.request(`/appointments/cancel.php?id=${encodeURIComponent(pendingId)}`, {
+        method: 'PUT', body: { reason: 'Again' },
+      })).status, 400);
+
+      const confirmed = await book(540, 570, 'Completed transition');
+      assert.equal(confirmed.status, 201, confirmed.text);
+      const confirmedId = confirmed.payload.data.id;
+      const approved = await transition(confirmedId, 'approve');
+      assert.equal(approved.status, 200, approved.text);
+      assert.equal(approved.payload.data.status, 'confirmed');
+      assert.equal((await transition(confirmedId, 'approve')).status, 400);
+      const completed = await transition(confirmedId, 'complete');
+      assert.equal(completed.status, 200, completed.text);
+      assert.equal(completed.payload.data.status, 'completed');
+      assert.equal((await transition(confirmedId, 'complete')).status, 400);
+      assert.equal((await transition(confirmedId, 'cancel', { reason: 'Too late' })).status, 400);
+      assert.equal((await transition(confirmedId, 'reschedule', {
+        appointment_date: iso, start_minutes: 570, end_minutes: 600,
+      })).status, 400);
+      assert.equal((await transition(confirmedId, 'no-show')).status, 400);
+
+      const rejectable = await book(570, 600, 'Rejection transition');
+      assert.equal(rejectable.status, 201, rejectable.text);
+      const rejectableId = rejectable.payload.data.id;
+      assert.equal((await transition(rejectableId, 'reject', { reason: '' })).status, 400);
+      const rejected = await transition(rejectableId, 'reject', { reason: 'Schedule conflict' });
+      assert.equal(rejected.status, 200, rejected.text);
+      assert.equal(rejected.payload.data.status, 'rejected');
+      assert.equal(rejected.payload.data.reschedule_reason, 'Schedule conflict');
+      assert.equal((await transition(rejectableId, 'approve')).status, 400);
+      assert.equal((await transition(rejectableId, 'complete')).status, 400);
+      assert.equal((await transition(rejectableId, 'no-show')).status, 400);
+      assert.equal((await transition(rejectableId, 'cancel', { reason: 'Too late' })).status, 400);
+
+      const target = await book(540, 570, 'Reschedule transition');
+      assert.equal(target.status, 201, target.text);
+      const targetId = target.payload.data.id;
+      const otherBooking = await book(600, 630, 'Conflicting faculty slot', other, otherId);
+      assert.equal(otherBooking.status, 201, otherBooking.text);
+
+      const outsiderReschedule = await other.request(`/appointments/reschedule.php?id=${encodeURIComponent(targetId)}`, {
+        method: 'PUT', body: { appointment_date: iso, start_minutes: 540, end_minutes: 570 },
+      });
+      assert.equal(outsiderReschedule.status, 403, outsiderReschedule.text);
+
+      const invalidEnd = await student.request(`/appointments/reschedule.php?id=${encodeURIComponent(targetId)}`, {
+        method: 'PUT', body: { appointment_date: iso, start_minutes: 600, end_minutes: 600 },
+      });
+      assert.equal(invalidEnd.status, 400, invalidEnd.text);
+      assert.match(invalidEnd.payload.error, /end time must be after/i);
+
+      const invalidDate = await student.request(`/appointments/reschedule.php?id=${encodeURIComponent(targetId)}`, {
+        method: 'PUT', body: { appointment_date: 'not-a-date', start_minutes: 540, end_minutes: 570 },
+      });
+      assert.equal(invalidDate.status, 400, invalidDate.text);
+
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const pastDate = await student.request(`/appointments/reschedule.php?id=${encodeURIComponent(targetId)}`, {
+        method: 'PUT', body: { appointment_date: localDate(yesterday), start_minutes: 540, end_minutes: 570 },
+      });
+      assert.equal(pastDate.status, 400, pastDate.text);
+      assert.match(pastDate.payload.error, /cannot be in the past/i);
+
+      const unavailable = await student.request(`/appointments/reschedule.php?id=${encodeURIComponent(targetId)}`, {
+        method: 'PUT', body: { appointment_date: iso, start_minutes: 720, end_minutes: 750 },
+      });
+      assert.equal(unavailable.status, 400, unavailable.text);
+      assert.match(unavailable.payload.error, /not available/i);
+
+      const facultyOverlap = await student.request(`/appointments/reschedule.php?id=${encodeURIComponent(targetId)}`, {
+        method: 'PUT', body: { appointment_date: iso, start_minutes: 600, end_minutes: 630 },
+      });
+      assert.equal(facultyOverlap.status, 409, facultyOverlap.text);
+      assert.match(facultyOverlap.payload.error, /conflicts with another appointment/i);
+
+      const requested = await student.request(`/appointments/reschedule.php?id=${encodeURIComponent(targetId)}`, {
+        method: 'PUT', body: {
+          appointment_date: iso, start_minutes: 570, end_minutes: 600,
+          reason: 'Requested a later slot for a lab conflict.',
+        },
+      });
+      assert.equal(requested.status, 200, requested.text);
+      assert.equal(requested.payload.data.status, 'reschedule_requested');
+      assert.equal(Number(requested.payload.data.start_minutes), 570);
+      assert.equal(requested.payload.data.reschedule_reason, 'Requested a later slot for a lab conflict.');
+
+      const blocked = await admin.request('/faculty/schedule_overrides.php', { method: 'POST', body: {
+        faculty_id: facultyId, date: iso, kind: 'blocked', start_minutes: 570, end_minutes: 600,
+        reason: 'Availability changed after the request.',
+      } });
+      assert.equal(blocked.status, 201, blocked.text);
+      const approvalConflict = await transition(targetId, 'approve');
+      assert.equal(approvalConflict.status, 409, approvalConflict.text);
+      assert.match(approvalConflict.payload.error, /no longer available/i);
+      assert.equal((await admin.request(
+        `/faculty/schedule_overrides.php?id=${encodeURIComponent(blocked.payload.data.id)}`,
+        { method: 'DELETE' },
+      )).status, 200);
+
+      const approvedRequest = await transition(targetId, 'approve');
+      assert.equal(approvedRequest.status, 200, approvedRequest.text);
+      assert.equal(approvedRequest.payload.data.status, 'confirmed');
+      assert.equal(Number(approvedRequest.payload.data.start_minutes), 570);
+
+      const facultyMoved = await transition(targetId, 'reschedule', {
+        appointment_date: iso, start_minutes: 540, end_minutes: 570,
+      });
+      assert.equal(facultyMoved.status, 200, facultyMoved.text);
+      assert.equal(facultyMoved.payload.data.status, 'confirmed');
+      assert.equal(Number(facultyMoved.payload.data.start_minutes), 540);
+
+      const reRequested = await student.request(`/appointments/reschedule.php?id=${encodeURIComponent(targetId)}`, {
+        method: 'PUT', body: {
+          appointment_date: iso, start_minutes: 570, end_minutes: 600,
+          reason: 'The original lab conflict is still unresolved.',
+        },
+      });
+      assert.equal(reRequested.status, 200, reRequested.text);
+      assert.equal(reRequested.payload.data.status, 'reschedule_requested');
+      const rejectedReschedule = await transition(targetId, 'reject', { reason: 'No later openings this week.' });
+      assert.equal(rejectedReschedule.status, 200, rejectedReschedule.text);
+      assert.equal(rejectedReschedule.payload.data.status, 'rejected');
+      assert.equal((await transition(targetId, 'approve')).status, 400);
+    });
+
   } finally {
     cleanup();
   }

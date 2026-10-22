@@ -21,11 +21,11 @@ spl_autoload_register(static function (string $class): void {
 /**
  * Send a transactional email using the configured SMTP transport.
  *
- * Local testing defaults to Mailpit. FCAMS_MAIL_* overrides are optional.
+ * Local testing defaults to Mailpit. SCHEDWISE_MAIL_* overrides are optional.
  *
  * @throws RuntimeException when delivery fails.
  */
-function sendFcamsMail(
+function sendSchedWiseMail(
     string $to,
     string $subject,
     string $htmlBody,
@@ -44,8 +44,8 @@ function sendFcamsMail(
     $username = (string)($mailConfig['username'] ?? '');
     $password = (string)($mailConfig['password'] ?? '');
     $encryption = strtolower((string)($mailConfig['encryption'] ?? ''));
-    $fromEmail = (string)($mailConfig['from_email'] ?? 'no-reply@fcams.edu');
-    $fromName = (string)($mailConfig['from_name'] ?? 'FCAMS');
+    $fromEmail = (string)($mailConfig['from_email'] ?? 'no-reply@schedwise.edu');
+    $fromName = (string)($mailConfig['from_name'] ?? 'SchedWise');
     $timeout = max(3, (int)($mailConfig['timeout'] ?? 10));
 
     if ($host === '') {
@@ -113,7 +113,7 @@ function sendPasswordResetCode(string $to, string $code): void
 <body style="margin:0;padding:0;background:#f8fafc;font-family:Arial,Helvetica,sans-serif;color:#1e293b;">
   <div style="max-width:560px;margin:32px auto;padding:0 20px;">
     <div style="background:#ffffff;border:1px solid #dbeafe;border-radius:16px;padding:32px;">
-      <p style="margin:0 0 8px;font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#2563eb;">FCAMS</p>
+      <p style="margin:0 0 8px;font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#2563eb;">SchedWise</p>
       <h1 style="margin:0 0 16px;font-size:24px;line-height:1.3;">Reset your password</h1>
       <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#475569;">Use the code below to choose a new password. It expires in <strong>30 minutes</strong>.</p>
       <div style="margin:0 0 20px;padding:18px 20px;border-radius:12px;background:#eff6ff;text-align:center;">
@@ -127,18 +127,18 @@ function sendPasswordResetCode(string $to, string $code): void
 </html>
 HTML;
 
-    $text = "FCAMS password reset\n\n"
+    $text = "SchedWise password reset\n\n"
         . "Use this code to choose a new password: {$code}\n\n"
         . "The code expires in 30 minutes. If you did not request a reset, ignore this email.\n";
 
-    sendFcamsMail($to, 'Your FCAMS password reset code', $html, $text);
+    sendSchedWiseMail($to, 'Your SchedWise password reset code', $html, $text);
 }
 
 /**
  * Email a single-use account-verification link. The raw token stays in the
  * URL and is never logged by the application.
  */
-function sendEmailVerificationLink(string $to, string $url): void
+function sendEmailVerificationLink(string $to, string $url, string $role = 'student'): void
 {
     if (!filter_var($url, FILTER_VALIDATE_URL)) {
         throw new RuntimeException('Verification URL is invalid.');
@@ -150,6 +150,11 @@ function sendEmailVerificationLink(string $to, string $url): void
     }
 
     $safeUrl = htmlspecialchars($url, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $role = $role === 'faculty' ? 'faculty' : 'student';
+    $accountLabel = $role === 'faculty' ? 'faculty' : 'student';
+    $approvalNote = $role === 'faculty'
+        ? ' After verification, an administrator must approve your faculty account before you can sign in.'
+        : '';
 
     $html = <<<HTML
 <!doctype html>
@@ -157,15 +162,15 @@ function sendEmailVerificationLink(string $to, string $url): void
 <body style="margin:0;padding:0;background:#f8fafc;font-family:Arial,Helvetica,sans-serif;color:#1e293b;">
   <div style="max-width:560px;margin:32px auto;padding:0 20px;">
     <div style="background:#ffffff;border:1px solid #dbeafe;border-radius:16px;padding:32px;">
-      <p style="margin:0 0 8px;font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#2563eb;">FCAMS</p>
+      <p style="margin:0 0 8px;font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#2563eb;">SchedWise</p>
       <h1 style="margin:0 0 16px;font-size:24px;line-height:1.3;">Verify your email address</h1>
-      <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#475569;">Confirm this email address to activate your student account. The link expires in <strong>24 hours</strong> and can be used once.</p>
+      <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#475569;">Confirm this email address to verify your {$accountLabel} account.{$approvalNote} The link expires in <strong>24 hours</strong> and can be used once.</p>
       <p style="margin:0 0 24px;text-align:center;">
         <a href="{$safeUrl}" style="display:inline-block;padding:13px 22px;border-radius:8px;background:#2563eb;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;">Verify Email</a>
       </p>
       <p style="margin:0 0 12px;font-size:13px;line-height:1.6;color:#64748b;">If the button does not work, copy this link into your browser:</p>
       <p style="margin:0 0 20px;font-size:12px;line-height:1.6;word-break:break-all;color:#2563eb;">{$safeUrl}</p>
-      <p style="margin:0;font-size:13px;line-height:1.6;color:#64748b;">If you did not create a FCAMS account, you can ignore this email.</p>
+      <p style="margin:0;font-size:13px;line-height:1.6;color:#64748b;">If you did not create a SchedWise account, you can ignore this email.</p>
     </div>
     <p style="margin:16px 0 0;text-align:center;font-size:11px;color:#94a3b8;">Faculty Consultation and Appointment Management System</p>
   </div>
@@ -173,9 +178,58 @@ function sendEmailVerificationLink(string $to, string $url): void
 </html>
 HTML;
 
-    $text = "FCAMS email verification\n\n"
-        . "Verify your email address to activate your student account:\n{$url}\n\n"
+    $text = "SchedWise email verification\n\n"
+        . "Verify your email address for your {$accountLabel} account.{$approvalNote}\n{$url}\n\n"
         . "The link expires in 24 hours and can be used once. If you did not create an account, ignore this email.\n";
 
-    sendFcamsMail($to, 'Verify your FCAMS email address', $html, $text);
+    sendSchedWiseMail($to, 'Verify your SchedWise email address', $html, $text);
+}
+
+/**
+ * Notify a self-registered faculty member that an administrator approved or
+ * rejected the account. This email contains no tokens or credentials.
+ */
+function sendFacultyApprovalDecision(string $to, string $name, bool $approved): void
+{
+    global $config;
+
+    $name = trim($name);
+    $safeName = htmlspecialchars($name !== '' ? $name : 'Faculty member', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $frontendUrl = (string)($config['app']['frontend_url'] ?? 'http://localhost:5173');
+    $safeUrl = htmlspecialchars(rtrim($frontendUrl, '/'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+
+    if ($approved) {
+        $subject = 'Your SchedWise faculty account has been approved';
+        $heading = 'Faculty account approved';
+        $body = 'Your email address is verified and an administrator approved your faculty account. You can now sign in to SchedWise and manage your consultation availability.';
+        $text = "SchedWise faculty account approved\n\nHello {$name},\n\nYour email address is verified and an administrator approved your faculty account. You can now sign in:\n{$frontendUrl}\n";
+    } else {
+        $subject = 'Your SchedWise faculty registration was not approved';
+        $heading = 'Faculty registration not approved';
+        $body = 'An administrator reviewed your faculty registration and did not approve it. Contact the system administrator if you believe this is a mistake.';
+        $text = "SchedWise faculty registration not approved\n\nHello {$name},\n\nAn administrator reviewed your faculty registration and did not approve it. Contact the system administrator if you believe this is a mistake.\n";
+    }
+
+    $html = <<<HTML
+<!doctype html>
+<html lang="en">
+<body style="margin:0;padding:0;background:#f8fafc;font-family:Arial,Helvetica,sans-serif;color:#1e293b;">
+  <div style="max-width:560px;margin:32px auto;padding:0 20px;">
+    <div style="background:#ffffff;border:1px solid #dbeafe;border-radius:16px;padding:32px;">
+      <p style="margin:0 0 8px;font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#2563eb;">SchedWise</p>
+      <h1 style="margin:0 0 16px;font-size:24px;line-height:1.3;">{$heading}</h1>
+      <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#475569;">Hello {$safeName},</p>
+      <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#475569;">{$body}</p>
+      <p style="margin:0 0 24px;text-align:center;">
+        <a href="{$safeUrl}" style="display:inline-block;padding:13px 22px;border-radius:8px;background:#2563eb;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;">Open SchedWise</a>
+      </p>
+      <p style="margin:0;font-size:13px;line-height:1.6;color:#64748b;">If you did not create a SchedWise account, you can ignore this email.</p>
+    </div>
+    <p style="margin:16px 0 0;text-align:center;font-size:11px;color:#94a3b8;">Faculty Consultation and Appointment Management System</p>
+  </div>
+</body>
+</html>
+HTML;
+
+    sendSchedWiseMail($to, $subject, $html, $text);
 }

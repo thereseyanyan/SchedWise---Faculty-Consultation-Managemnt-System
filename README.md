@@ -1,23 +1,41 @@
-# FCAMS — Faculty Consultation and Appointment Management System
+# SchedWise — Faculty Consultation and Appointment Management System
 
 > **Current email setup:** Local Mailpit testing is restored. The launcher starts Mailpit automatically; inbox links remain hidden in the app. No real email provider or paid subscription is needed.
 
 
 The document reserves a stable vertical scrollbar gutter so centered headers, dashboard cards, and content do not shift horizontally between short and long pages. Older browsers use an always-reserved vertical scrollbar as a fallback.
 
-FCAMS is a local-first academic consultation platform for students, faculty, and administrators. It centralizes faculty availability, appointment requests, consultation records, notifications, and reports in one React + PHP + MySQL application.
+SchedWise is a local-first academic consultation platform for students, faculty, and administrators. It centralizes faculty availability, appointment requests, consultation records, notifications, and reports in one React + PHP + MySQL application.
 
 > **Project mode:** local development/demo. The app is intentionally not deployed, but it is built with production-grade authorization, session handling, CSRF protection, validation, and error handling. Keep the same standard when extending it.
 
 ---
 
-## Change Summary (2026-10-21)
+## Change Summary (2026-10-22)
 
+- Rebranded the system as **SchedWise** across the interface, email templates, API messages, launcher, scripts, documentation, demo accounts, local database name, and `SCHEDWISE_*` configuration variables. The local database was migrated from `fcams` to `schedwise`; a pre-migration backup is retained, and the working database was reset to the documented clean demo baseline after stale manual data was detected.
+- Split the former 5,600-line `frontend/src/App.tsx` into a small root shell plus shared modules (`src/shared/`) and role/feature components (`src/features/auth`, `student`, `faculty`, `admin`, `appointments`, `account`, `legal`). Behavior and API contracts are unchanged.
+- Added report filters for month, department, and faculty across the analytics summary, six-month chart, and CSV export. Admin-selected filters are validated server-side and stay within the role-scoped report query.
+- Added a **no-show** appointment action for faculty/admin after the consultation window ends. The server records the transition, writes an audit entry, and sends the student an in-app notification. Final states hide reschedule/cancel actions, and reschedule requests now use an enabled approval control with explicit text.
+- Clarified reschedule-request handling in the faculty appointment panel: the requested date/time and the student's note are shown together, approval is labelled as confirming the new time, and scheduling failures stay inside the reschedule form with retry and choose-another-time actions. Student booking conflicts now offer a refresh-availability retry instead of only a text error.
+- Normalized timezone display: `app.timezone`/`SCHEDWISE_TIMEZONE` now sets PHP's default timezone to `Asia/Kuala_Lumpur` by default, matching the local MySQL clock. Database rules still use `backend/shared/clock.php`.
+- Added student self-service cancel and reschedule actions from the new **My Appointments** view. Both actions require a written reason and confirmation; reschedule conflicts keep the dialog open with a **Refresh available times** retry. Student history now shows only past/finished appointments.
+- Added an in-app notification inbox to every portal header with unread counts, individual and bulk mark-read actions, focus refresh, and a 60-second poll. This exposes the notifications the API already generated for bookings, decisions, cancellations, no-shows, and account approval.
+- Fixed the student consultation history to read actual consultation records (shared summary, action items, follow-up date) instead of an appointment `summary` field the appointment API never returned. Appointment list responses now include only the shared consultation summary; private notes remain faculty/admin-only.
+- Faculty declines and cancellations now require a written reason instead of the hard-coded `"No reason provided"` / `"Cancelled by faculty"` text, with inline validation, visible server errors, and confirmation before the final action.
+- Expanded the committed Playwright browser smoke test to cover privacy placement, dashboard card navigation, faculty self-registration with Mailpit verification and admin approval, the notification inbox and mark-all-read, the purple theme, inline login validation, sign-out cancellation, student appointment filtering, student cancel/reschedule, consultation feedback, report department/faculty filters, and the filtered CSV export link.
 - Applied a purple theme throughout the interface.
 - Made student, faculty, and administrator dashboard summary cards clickable, opening the corresponding lists or analytics.
 - Reserved scrollbar space to prevent horizontal layout shifts between short and long pages.
 - Restricted login to email and password; STU/FAC IDs remain account identifiers.
-- Added fixed `STU-` and `FAC-` prefixes with digits-only input, preserved leading zeroes, optional automatic ID generation, and duplicate prevention. Assigned IDs remain permanent.
+- Added fixed `STU-` and `FAC-` prefixes with digits-only input, preserved leading zeroes, automatic unique ID generation for every student/faculty registration, and duplicate prevention. Sequences advance past manually supplied IDs and resync to the highest existing ID. Assigned IDs remain permanent.
+- Added faculty self-registration with email verification and explicit administrator approval/rejection; faculty cannot sign in until approved. Decisions send email and in-app notifications.
+- Surfaced pending faculty approvals on the Admin Dashboard with an amber Faculty card and a User Management nav badge; removed the hard-coded demo credentials from the login screen.
+- Made the admin Master User List search filter as you type after a short debounce, with stale-response protection.
+- Added an admin-only **Audit Log** view with server-side pagination, search, action/entity/date filters, and a read-only event timeline. Sensitive values are rendered as summarized changes.
+- Added search, status/date filters, result counts, and client-side pagination to the appointment lists used by administrators and students.
+- Added guided empty states across appointment, user, report, consultation-history, and audit views, plus a first-run setup panel on the Admin Dashboard when only the administrator account exists.
+- Added a committed Playwright browser smoke test that covers admin login, user search-as-you-type, appointment filters, report filters, the Audit Log view, sign-out, and student/faculty role routing. `tools/run-tests.ps1` now runs the API suite followed by the browser smoke test when frontend dependencies are installed.
 - Made account roles permanent, including for administrators.
 - Added account deletion that removes access while retaining appointment and audit history.
 - Placed validation errors below the relevant form fields and kept dialog errors visible inside their forms.
@@ -30,7 +48,7 @@ FCAMS is a local-first academic consultation platform for students, faculty, and
 - Kept local Mailpit testing and automatic startup while hiding inbox links and on-screen debug tokens.
 - Updated setup documentation and regression coverage for account IDs, roles, booking rules, deletion, and email testing.
 
-Validation recorded for these changes includes TypeScript checking, production builds, PHP syntax checks, PowerShell parsing, API regressions, and client CSRF tests. Browser interaction and multi-worker concurrency coverage remain pending. This summary is documentation-only; the high-priority TODO list is unchanged.
+Validation recorded for these changes includes TypeScript checking, production builds, PHP syntax checks, 16/16 API regressions, 4/4 client CSRF tests, and the committed Playwright browser smoke test. The browser test runs against headless Brave/Chrome/Edge and covers privacy placement, purple-theme styling, dashboard card navigation, faculty registration/email verification/admin approval, notification inbox and mark-all-read, inline validation, sign-out cancel/accept, admin user search, appointment filtering, student cancel/reschedule, consultation feedback, report filters and export, the Audit Log view, and seeded role routing. The SchedWise rebrand and frontend module split were verified with the same suite. Multi-worker concurrency coverage remains pending. The high-priority TODO list reflects the remaining maintainability and polish work.
 
 ## 0. Documentation Contract
 
@@ -55,7 +73,7 @@ Students often arrange consultations through informal messages, paper records, o
 
 ### Solution
 
-FCAMS provides:
+SchedWise provides:
 
 - authenticated student, faculty, and administrator accounts
 - recurring faculty availability and date-specific schedule overrides
@@ -69,9 +87,9 @@ FCAMS provides:
 
 | Role | Main capabilities |
 | --- | --- |
-| Student | Register, browse faculty, book appointments, cancel/reschedule requests, read own consultations and notifications |
-| Faculty | Manage recurring availability and overrides, approve/reject/reschedule/complete appointments, write consultation records |
-| Administrator | Manage accounts and roles/status, view all appointments and reports, export CSV, manage any schedule/record |
+| Student | Register, browse faculty, book appointments, cancel or request a new time, review consultation feedback, and read notifications |
+| Faculty | Manage recurring availability and overrides, approve/reject with a reason, reschedule/complete appointments, write consultation records, and read notifications |
+| Administrator | Manage accounts and statuses, review faculty approvals and the audit log, view all appointment lists and reports, export CSV, and mark ended appointments as no-show |
 
 ---
 
@@ -86,7 +104,17 @@ FCAMS provides:
 - CSRF token enforcement on state-changing requests
 - Login, registration, email-verification/resend, forgot-password, and reset-password throttling
 - Password reset codes hashed, expiring, single-use, and all outstanding codes invalidated after reset
-- Verified self-registration: new students stay `pending` until they open a hashed, 24-hour, single-use email link; demo accounts remain active and administrator-created accounts default to active with `email_verified_at` set
+- Verified self-registration for students and faculty: new accounts stay `pending` until they open a hashed, 24-hour, single-use email link. Faculty accounts then remain pending administrator approval (`faculty_approval_status = pending`), which is performed from User Management and sends a decision email. Demo accounts remain active and administrator-created accounts default to active with `email_verified_at` set
+- Pending faculty approvals are counted on the Admin Dashboard Faculty card and shown as an amber badge on User Management; the login screen no longer prints demo credentials
+- The admin Master User List filters as you type after a 250 ms debounce; pressing Enter is not required, and stale responses cannot overwrite newer results
+- The admin-only **Audit Log** view reads `audit_logs` through a paginated endpoint with search, action, entity type, actor, and date filters; old/new values are summarized and no audit row is editable
+- Appointment lists accept search text, status and date-range filters, show the visible/total count, and paginate in 8-row pages for both administrator and student views
+- System Analytics accepts month, department, and faculty filters. The summary, six-month chart, and CSV export use the same validated filter scope; administrators can also clear filters in one action
+- Confirmed appointments can be marked `no_show` by faculty or an administrator after the consultation end time; the server checks the database clock, writes an audit entry, and notifies the student. Final states hide reschedule/cancel actions. Reschedule-requested appointments show an enabled approval control and explicit request text. The action is available from the faculty calendar panel and from admin/faculty appointment lists once the consultation has ended.
+- Students can cancel or request a new time for their own pending/confirmed/reschedule-requested appointments from **My Appointments**. The dialog requires a reason, confirms destructive actions, refreshes availability after a conflict, and updates the appointment cache and dashboard counts. **My History** is limited to past/finished appointments.
+- Every portal header has a notification inbox with an unread badge, per-notification and bulk mark-read, focus refresh, and a 60-second poll. It reads the existing `/notifications/index.php` API for the signed-in user.
+- Student feedback reads `consultation_records` through the role-scoped consultation API so summaries, action items, and follow-up dates are real. Appointment list responses carry only the shared `summary`; `private_notes` is never included. A saved consultation is frozen in the calendar panel to prevent duplicate creation; the complete record remains available in **Consultation Records**.
+- Guided empty states explain the next action for empty appointment lists, filtered user searches, reports without completed consultations, consultation history, faculty request queues, and the audit log. A first-run panel appears on the Admin Dashboard when only the administrator account exists
 - Registration opts out of browser autofill on the email field to avoid a Brave 1.97 browser-process crash when its email suggestion dropdown opens; custom validation and the mobile email keyboard remain available
 - Server-side role and ownership authorization on every protected resource
 - Appointment conflict detection, availability checks, past-date rejection, and state-transition guards
@@ -95,9 +123,12 @@ FCAMS provides:
 - Security headers, generic 500 responses, and `no-store` API responses
 - One-click Windows launcher and stop shortcut
 - Launcher preflight checks for PHP 8+, Node.js 20.19+/22.12+, npm, and MySQL; missing prerequisites get a clear dialog with the requirement and an optional download page
-- Verification and password-reset delivery through a configured SMTP provider using vendored PHPMailer; no automatic Mailpit download/startup
+- Verification and password-reset delivery through local Mailpit using vendored PHPMailer; the launcher starts Mailpit automatically, and optional `SCHEDWISE_MAIL_*` settings can target a real SMTP provider
 - Account settings dialog for profile editing and signed-in password changes
-- Repeatable API regression suite covering auth, CSRF, roles, verified registration, resend/verification, reset email, booking, profile, and password changes
+- Repeatable API regression suite covering auth, CSRF, roles, verified student/faculty registration, faculty approval/rejection, resend/verification, reset email, booking and bookable slots, profile, password changes, permanent/unique IDs, account deletion, consultation privacy, report filters, no-show guards, appointment transitions, reschedule conflicts, and admin-only audit pagination/filtering
+- Committed Playwright browser smoke test covering privacy placement, purple-theme styling, dashboard card navigation, faculty self-registration with Mailpit verification and admin approval, notification inbox and mark-all-read, inline login validation, admin login/search, appointment filters, student cancel/reschedule, student consultation feedback, report department/faculty filters and export, the Audit Log view, sign-out cancel/accept, and student/faculty role routing; it uses installed Brave/Chrome/Edge through `playwright-core` and skips cleanly when no supported browser is available
+- PHP's default timezone follows `app.timezone`/`SCHEDWISE_TIMEZONE` (default `Asia/Kuala_Lumpur`) so formatted dates match the local MySQL clock; business rules still use `backend/shared/clock.php`
+- Filtered appointment, audit, and report counts use polite live regions so screen readers announce result changes
 - Explicit demo reset command and timestamped SQL backup/restore commands
 - Clean demo seed: 3 accounts, 4 departments, 10 availability rows, no seeded appointments/notifications
 
@@ -105,27 +136,55 @@ FCAMS provides:
 
 #### P0 — do next
 
-- [ ] None currently. The former dependency-preflight gap is covered by the launcher; see Implemented.
+- [ ] None for the local demo. The former dependency-preflight gap is covered by the launcher; see Implemented. Production blockers are tracked in **Production Backend Backlog** below.
 
 #### P1 — next quality pass
 
-- [ ] Add browser automation for confirmation accept/cancel, privacy placement, inline form errors, dashboard card navigation, and the purple theme. API coverage for booking/IDs/deletion is in place.
-
-- [ ] Split `frontend/src/App.tsx` into feature components. It is currently a large monolith and is the main frontend maintainability risk.
-- [ ] Add pagination/search to users, appointments, and reports.
-- [ ] Expand automated coverage to appointment state transitions and browser-level UI flows.
-- [ ] Add an audit-log viewer for administrators.
-- [ ] Add a `no_show` workflow and clearer reschedule-request UI.
-- [ ] Normalize timezone display. Database time rules use the MySQL clock through `backend/shared/clock.php`; PHP is configured as Europe/Berlin while MySQL uses the local Malay Peninsula time.
-- [ ] Add guided empty states and first-run onboarding for a clean database.
+- [x] Expand the committed browser smoke test to privacy placement, dashboard card navigation, faculty onboarding/approval, and the purple theme. The current test covers inline validation, sign-out cancel/accept, admin login/search, appointment filters, report filters/export, the Audit Log view, and seeded role routing.
+- [x] Split `frontend/src/App.tsx` into feature components. The root shell now handles session bootstrapping and role routing; shared UI/API helpers and role features live under `frontend/src/shared/` and `frontend/src/features/`.
+- [x] Expand automated coverage to remaining appointment state transitions and reschedule conflict/error states. Report filters, no-show guards, and student reschedule-request approval are covered.
+- [x] Add clearer reschedule-request UI text and dedicated retry/error states for scheduling conflicts.
+- [x] Add student-facing cancel/reschedule controls instead of leaving those API actions unreachable from the UI.
+- [x] Surface in-app notifications with an inbox, unread count, and mark-read controls for every role.
+- [x] Load real consultation summaries/action items in student history and freeze saved consultation forms to prevent duplicate records.
+- [x] Require written faculty decline/cancel reasons and show inline validation/server errors.
 
 #### P2 — polish
 
-- [ ] Accessibility audit (keyboard navigation, focus states, labels, contrast).
+- [ ] Accessibility audit (keyboard navigation, focus states, labels, contrast). Filtered appointment, audit, and report counts now use polite live regions.
 - [ ] Responsive layout review on small screens.
-- [ ] Report filters by department/faculty/date.
 - [ ] Email or desktop notifications in addition to in-app notifications.
 - [ ] Optional branding/icon pass for the launcher and app.
+
+### Production Backend Backlog
+
+> **Scope:** none of these items block the current local demo or submission. They are the backend work required before SchedWise is exposed to real users on a shared network. Items are ordered by risk.
+
+#### Production P0 — required before shared deployment
+
+- [ ] **Production email delivery and retry.** Configure SMTP with TLS and a verified sender domain. Add an `email_outbox` table and worker with retry/backoff, persistent queued/sent/failed status, and alerts for failed verification, reset, and decision emails. Current mail is synchronous; Mailpit is local-only.
+- [ ] **Production runtime and database security.** Run behind HTTPS with PHP-FPM and Nginx/Apache; use secure cookies; set production `allowed_origins`/`frontend_url`; disable debug and localhost recovery fallbacks; add a Content-Security-Policy and review other security headers; create a least-privilege MySQL user; keep `config.php` and secrets outside the web root; replace the demo credentials.
+- [ ] **Backup, restore, and retention.** Automate encrypted backups off-machine; schedule restore drills into a separate database; document recovery point/time objectives; define and implement retention, purge, and anonymization rules for audit logs, consultation records, notifications, deleted accounts, and backups.
+- [ ] **Concurrency and data integrity.** Add a unique constraint on `consultation_records.appointment_id`; lock the appointment row while creating a consultation; handle duplicate-key conflicts; run multi-worker tests for booking, approval, reschedule, cancellation, and consultation creation. Current slot protection is application-level and has only been exercised against the single-process PHP server.
+- [ ] **Monitoring and alerting.** Add structured application logs with request IDs, mail-failure alerts, database/slow-query monitoring, health/readiness checks, uptime monitoring, and alerts for failed backups and rate-limit spikes.
+- [ ] **Server-side pagination and search.** Add pagination and server-side filters to appointments, consultations, and user lists; paginate notifications. Appointment search and pagination are currently client-side over the full role-scoped result set.
+
+#### Production P1 — major backend features
+
+- [ ] **Consultation editing and versioning.** Add `PUT /consultations/index.php` with faculty ownership/admin authorization, audit old/new values, private-note redaction, optional revision history, and a documented rule for what students see after an edit. Consultation records are currently create-only.
+- [ ] **Scheduled background jobs.** Add a scheduler/worker for appointment reminders, email notification delivery, expired verification/reset-token cleanup, rate-limit cleanup, notification retention, and soft-deleted account anonymization.
+- [ ] **Data export and deletion.** Provide a documented export workflow and a delayed purge/anonymization process for deleted accounts while preserving required audit history.
+- [ ] **Versioned database migrations.** Replace the idempotent setup script as the production schema path with versioned migrations, an applied-migration table, clean-database CI runs, and an intentional rollback/recovery procedure.
+- [ ] **Email notifications and reminders.** Send approved/rejected, cancellation/reschedule, pending-approval, and upcoming-appointment emails through the outbox from Production P0.
+
+#### Production P2 — smaller backend follow-ups
+
+- [ ] Add consistent pagination metadata to every list endpoint.
+- [ ] Add indexes and server-side filtering for appointment topics/reasons if search volume requires it.
+- [ ] Add paginated admin consultation and availability browsing endpoints.
+- [ ] Add audit-log retention/archival and database-level tamper resistance.
+- [ ] Add OpenAPI/API reference generation.
+- [ ] Add CI for PHP lint, TypeScript, API/CSRF/browser suites, and clean-database migrations.
 
 ---
 
@@ -142,14 +201,14 @@ Browser
 PHP built-in server
   http://127.0.0.1:8000
         │
-        ├── PDO / MySQL ──▶ MySQL 127.0.0.1:3306 / database: fcams
+        ├── PDO / MySQL ──▶ MySQL 127.0.0.1:3306 / database: schedwise
         │
         └── SMTP ─────────▶ Mailpit 127.0.0.1:1025
                                  │
                                  └── web inbox http://localhost:8025
 ```
 
-Apache is **not required** for local use. The launcher starts the PHP built-in server and Vite. Vite proxies `/api` to PHP so cookies and CSRF tokens remain same-origin. Transactional emails use the configured SMTP provider; mail remains unavailable until configured.
+Apache is **not required** for local use. The launcher starts the PHP built-in server and Vite. Vite proxies `/api` to PHP so cookies and CSRF tokens remain same-origin. Transactional emails use local Mailpit by default; configure optional `SCHEDWISE_MAIL_*` values only when testing real delivery.
 
 ### Technology
 
@@ -160,7 +219,7 @@ Apache is **not required** for local use. The launcher starts the PHP built-in s
 | Database | MySQL 9.5 locally |
 | Local tools | PowerShell launcher, VBS hidden wrapper, Windows shortcuts |
 | Auth | PHP sessions + password hashing (`PASSWORD_DEFAULT`) |
-| Email | Real SMTP provider; PHPMailer 7.1.1 vendored under `backend/vendor/phpmailer` |
+| Email | Local Mailpit SMTP (`127.0.0.1:1025`) with optional real-provider overrides; PHPMailer 7.1.1 vendored under `backend/vendor/phpmailer` |
 | Tests | Node built-in test runner (`node:test`) against the running API |
 
 ### Request conventions
@@ -183,25 +242,31 @@ PHP FINAL/
 │   ├── health.php                 # safe health endpoint
 │   ├── auth/                      # register, login/logout, verify/resend, forgot/reset/change password
 │   ├── users/                     # admin user management + self profile
+│   ├── audit/                     # admin-only paginated audit-log reader
 │   ├── faculty/                   # directory, recurring availability, schedule overrides
-│   ├── appointments/              # list/create + approve/reject/cancel/complete/reschedule
+│   ├── appointments/              # list/create + approve/reject/cancel/complete/no-show/reschedule
 │   ├── consultations/             # consultation records and privacy filtering
 │   ├── notifications/             # list and mark-read
-│   ├── reports/                   # summary, monthly series, CSV export
+│   ├── reports/                   # summary, monthly series, CSV export with shared filters
 │   ├── vendor/phpmailer/          # pinned PHPMailer 7.1.1 source + license (no Composer needed)
 │   └── shared/
 │       ├── auth.php               # sessions, CSRF, current user, audit, notifications
 │       ├── authorization.php      # ownership and availability/conflict rules
 │       ├── validation.php         # appointment, URL, password, email validation
+│       ├── report_filters.php     # role scope + admin department/faculty report filters
 │       ├── clock.php              # DB-consistent current date helpers
 │       ├── rate_limit.php         # database-backed throttling
 │       ├── verification.php       # hashed email-verification tokens and frontend links
 │       └── mailer.php             # SMTP transport, verification/reset email templates
 ├── frontend/
 │   ├── src/api.ts                 # typed API client and CSRF token holder
-│   ├── src/App.tsx                # current UI (role views + account settings; refactor is a backlog item)
+│   ├── src/App.tsx                # root session shell and role routing
+│   ├── src/shared/                # shared UI, types, appointment store, notification inbox, auth/date helpers
+│   ├── src/features/              # auth, student, faculty, admin, appointments, account, legal
 │   ├── src/main.tsx
 │   ├── src/index.css
+│   ├── tests/browser-smoke.test.mjs # Playwright-core browser smoke test (Brave/Chrome/Edge)
+│   ├── package.json               # includes the test:browser script and playwright-core dev dependency
 │   ├── .env                       # VITE_API_URL=/api (gitignored)
 │   ├── .env.example
 │   └── vite.config.ts             # /api proxy → 127.0.0.1:8000
@@ -211,13 +276,13 @@ PHP FINAL/
 │   ├── setup-database.php         # safe schema/demo bootstrap and migrations
 │   ├── reset-demo.php             # explicit destructive reset to the demo seed (--yes)
 │   ├── backup-database.php        # timestamped SQL backup under .runtime/backups
-│   ├── restore-database.php       # restore a backup (--yes; stop FCAMS first)
+│   ├── restore-database.php       # restore a backup (--yes; stop SchedWise first)
 │   ├── test-cleanup.php           # removes e2e test users and related rows
-│   ├── run-tests.ps1              # starts FCAMS if needed and runs the API suite
-│   ├── fcams-launcher.ps1         # start/stop MySQL, Mailpit, PHP, Vite, browser
-│   ├── fcams-launch.vbs           # hidden entry point used by shortcuts
-│   ├── fcams-start.ico            # green play icon for the start shortcut
-│   └── fcams-stop.ico             # red stop icon for the stop shortcut
+│   ├── run-tests.ps1              # starts SchedWise if needed; runs the API suite plus browser smoke test
+│   ├── schedwise-launcher.ps1         # start/stop MySQL, Mailpit, PHP, Vite, browser
+│   ├── schedwise-launch.vbs           # hidden entry point used by shortcuts
+│   ├── schedwise-start.ico            # green play icon for the start shortcut
+│   └── schedwise-stop.ico             # red stop icon for the stop shortcut
 ├── database.sql                   # complete fresh schema + demo accounts + availability + verification table
 ├── .runtime/                      # generated logs, process IDs, backups, Mailpit data (gitignored)
 └── README.md
@@ -231,31 +296,38 @@ Generated folders such as `frontend/node_modules`, `frontend/dist`, and `.runtim
 
 ### Student
 
-- Self-register only as a student.
+- Self-register as a student. Student accounts activate after email verification.
 - Browse active faculty and availability/overrides.
 - Create appointments for themselves only, with at most one request awaiting approval/rejection per faculty (including `reschedule_requested`). Requests to different faculty are allowed when their times do not overlap.
-- View only their own appointments, notifications, and consultation records.
-- Cancel their own pending/confirmed/reschedule-requested appointments.
-- Request a reschedule (status becomes `reschedule_requested`).
+- View only their own appointments, notifications, and consultation records. **My Appointments** holds active/pending history; **My History** lists past/finished appointments with shared consultation feedback.
+- Cancel their own pending/confirmed/reschedule-requested appointments from **My Appointments**, with a required reason and confirmation.
+- Request a reschedule (status becomes `reschedule_requested`) from **My Appointments**, choosing from current faculty availability; conflicts keep the dialog open with a refresh action.
+- Read their notification inbox from the header, including unread counts and mark-read controls.
 - Cannot read another student's consultations.
 - Cannot read faculty `private_notes`.
 
 ### Faculty
 
+- Self-register through the public form. The account requires email verification and then administrator approval; login returns `faculty_approval_pending` until approval and `faculty_approval_rejected` after rejection.
+- Receive an approval or rejection email after an administrator reviews the registration.
 - Manage their own recurring availability and date overrides.
 - View appointments only where they are the assigned faculty.
-- Approve/reject pending or reschedule-requested appointments.
+- Approve pending or reschedule-requested appointments. Declining requires a written reason, which is sent to the student.
 - Complete confirmed appointments.
-- Reschedule their own appointments.
-- Create consultation records for their completed appointments.
+- Reschedule their own appointments. Cancelling requires a written reason and confirmation.
+- Create consultation records for their completed appointments. Once saved, the calendar form is read-only; the complete record, including private notes, remains available in **Consultation Records**.
+- Read their notification inbox from the header.
 - Cannot read another faculty member's private notes through the API.
 
 ### Administrator
 
-- List, create, search, update status, inspect, and delete accounts. Roles and STU/FAC IDs are permanent after creation, including for administrators.
+- List, create, search, update status, inspect, and delete accounts. Roles and STU/FAC IDs are permanent after creation, including for administrators. Master User List search filters as you type after a 250 ms debounce; pressing Enter is not required.
+- Review self-registered faculty in the **Faculty approvals** panel or the pending-account row; approve only after email verification, or reject the registration. Pending/rejected accounts cannot be activated through the ordinary status dropdown.
+- See the pending faculty count on the Admin Dashboard Faculty card and as an amber badge on **User Management**; both open the existing approvals panel.
 - Delete removes access and hides the account from management lists; historical appointments, consultations, audit records, email, and ID reservations remain. Administrators cannot delete themselves.
-- View all appointments, consultations, availability, and reports.
-- Manage any schedule or appointment.
+- View all appointment lists and reports. Administrator API access can also read role-scoped consultation, availability, and schedule data; the UI exposes appointment oversight rather than schedule editing.
+- Review the read-only **Audit Log** with search, action/entity/date filters, result counts, and 25-entry server-side pages. The endpoint is administrator-only.
+- Mark ended confirmed appointments as no-show from the appointment list.
 - Export CSV reports.
 - Cannot set their own account to a non-active status through the self-update path.
 
@@ -263,13 +335,17 @@ Generated folders such as `frontend/node_modules`, `frontend/dist`, and `.runtim
 
 ### Account IDs and form feedback
 
-Students receive `STU-` IDs (for example `STU-0124`); faculty receive `FAC-` IDs (for example `FAC-0111`). New IDs are generated automatically when omitted. Administrators can supply a unique ID of the correct prefix and at least four digits during creation. Only email and password are accepted at login. STU/FAC IDs identify account records and cannot be used to sign in. Email is also required for verification and password reset. Public registration returns the generated Student ID and displays it in the confirmation notice.
+Students receive `STU-` IDs (for example `STU-0124`); faculty receive `FAC-` IDs (for example `FAC-0111`). Every public registration automatically allocates the next unique ID for its role. Administrators can supply a unique ID of the correct prefix and at least four digits during creation; doing so advances the sequence so later automatic IDs stay above it. Existing sequence values are resynced to the highest stored ID by `tools/setup-database.php`, and unique indexes prevent duplicates or reuse. Only email and password are accepted at login. STU/FAC IDs identify account records and cannot be used to sign in. Email is also required for verification and password reset. Registration confirmation displays the generated Student or Faculty ID.
 
 Email, password, name, ID, registration, reset-password, and booking validation errors appear below their corresponding fields. General create-account errors stay inside the account dialog. Calendar save errors appear in the active sidebar panel. Invalid inputs are marked with `aria-invalid` and associated error messages.
 
 The privacy notice appears only during registration and under Account Settings > Privacy; it does not appear on dashboards. Sign-out, account deletion/status changes, schedule creation/edit/deletion, appointment request/approval/rejection/cancellation/rescheduling/completion, consultation-note saving, account creation, and profile/password changes require an Yes/No confirmation before processing. No or Escape cancels without submitting the action.
 
-All dashboard summary cards are buttons. Student and faculty cards open matching appointment lists (Today/Upcoming, Pending, Completed, Total). Admin cards open all users, faculty-only users, all appointments, or completion analytics. Faculty pending requests include future dates; approvals/rejections update cached dashboard counts. The frontend uses a purple palette throughout.
+All dashboard summary cards are buttons. Student and faculty cards open matching appointment lists (Today/Upcoming, Pending, Completed, Total). Admin cards open all users, faculty-only users, all appointments, or completion analytics. The Admin Faculty card turns amber and shows the pending count when faculty approvals are waiting, and **User Management** shows the same count as a badge. Faculty pending requests include future dates; approvals/rejections update cached dashboard counts. The frontend uses a purple palette throughout.
+
+Appointment lists now include a search box (student/faculty name, topic, reason, status, or date), a status selector, From/To date filters, a visible/total count, and 8-row pagination. Search is client-side over the role-scoped result set, so student lists never load another student's appointments. Empty results explain whether the list is empty or the filters are too narrow and offer a **Clear filters** action. Admin empty states also explain when an account search has no matches or when a report has no completed consultations yet. When the database contains only the administrator account, the Admin Dashboard shows a first-run panel with account, availability, and booking steps.
+
+System Analytics includes month, department, and faculty controls plus a **Clear** action and a filtered **Export CSV** link. The selected scope applies to the summary cards, the six-month chart, and the CSV row set. Department choices come from the active faculty directory, and changing the department resets a faculty selection outside that department.
 
 ## 6. Appointment Rules
 
@@ -287,18 +363,25 @@ pending ──approve──► confirmed ──complete──► completed
 
 confirmed ──student reschedule──► reschedule_requested
 confirmed ──cancel──► cancelled
+confirmed ──no-show (after end time)──► no_show
 ```
 
-Faculty/admin reschedules go directly to `confirmed`. Students can only request a new time.
+Faculty/admin reschedules go directly to `confirmed`. Students can only request a new time. `no_show` is available only to faculty/admin after the consultation end time and is terminal; it does not reopen the booking.
+
+When an appointment is `reschedule_requested`, the faculty panel shows the requested date/time and the student's note in an amber summary, and the approval switch is labelled **Approve New Time**. If the server rejects a move because the slot was taken or the faculty is no longer available, the error stays in the reschedule form with **Retry same time** and **Choose another time** actions; the form is not closed and the notes error area is not reused. Student booking conflicts show a **Refresh available times** action that reloads faculty slots before the student tries again.
+
+Students use **My Appointments** for active requests and **My History** for past/finished consultations. Cancelling or requesting a new time opens one dialog with a required reason, a final Yes/No confirmation, and (for reschedules) the faculty member's currently available slots. A conflict keeps the dialog open and exposes **Refresh available times**. Successful actions update the appointment cache and dashboard counts. The header notification inbox is shared by all roles: it shows unread counts, marks one or all notifications read, reloads when the window regains focus, and polls every 60 seconds. Student history reads the consultation API for shared summaries and action items; the appointment list includes only `summary`, never `private_notes`.
 
 ### Booking and account API changes (2026-10-21)
 
 - `GET /faculty/slots.php`: authenticated list of `{ faculty_id, date, start_minutes }` for bookable 30-minute slots; exposes no student identities or private appointment details.
 - `POST /appointments/index.php`: returns 409 if another request is pending with the same faculty, or any pending/reschedule-requested/confirmed student appointment overlaps on the same date.
 - `POST /auth/login.php`: the `email` parameter requires a valid email address; STU/FAC IDs are rejected with a field-specific 400 response.
-- `POST /users/index.php`: field-specific validation errors; generates STU/FAC ID if omitted.
-- `PUT /users/index.php?id=…`: rejects role/ID changes, including by administrators.
+- `POST /users/index.php`: field-specific validation errors; generates a unique STU/FAC ID if omitted.
+- `POST /auth/register.php`: accepts `role_id` `student` or `faculty`; both receive an automatic unique ID, and faculty registrations start with `faculty_approval_status = pending`.
+- `PUT /users/index.php?id=…`: rejects role/ID changes, including by administrators. With `{ "faculty_approval_action": "approve" | "reject" }`, administrators approve or reject a pending faculty registration; approval requires `email_verified_at`.
 - `DELETE /users/index.php?id=…`: admin-only account deletion (soft delete), retaining history and rejecting self-deletion. Existing sessions stop authenticating.
+- `GET /appointments/index.php` and single-appointment responses include `summary` from the linked consultation record when one exists. `action_items`, `private_notes`, and other consultation fields are not embedded; clients read those from the role-scoped consultation endpoint.
 
 ### Validation
 
@@ -316,7 +399,8 @@ Faculty/admin reschedules go directly to `confirmed`. Students can only request 
 ### Consultation privacy
 
 - `summary` and `action_items` are student-visible.
-- `private_notes` is faculty/admin-only and is removed from student API responses.
+- Appointment responses embed only the shared `summary`; `action_items` and follow-up data come from `/consultations/index.php`.
+- `private_notes` is faculty/admin-only and is removed from student API responses, including appointment responses (which never select it).
 
 ---
 
@@ -327,7 +411,7 @@ Faculty/admin reschedules go directly to `confirmed`. Students can only request 
 | Table | Purpose |
 | --- | --- |
 | `roles` | student, faculty, admin |
-| `users` | email login identity, STU/FAC profile identifiers, permanent role, status, password hash, verification/login timestamps, `deleted_at` |
+| `users` | email login identity, STU/FAC profile identifiers, permanent role, status, `faculty_approval_status`, password hash, verification/login timestamps, `deleted_at` |
 | `account_id_sequences` | transaction-locked numeric counters for automatic STU/FAC IDs |
 | `user_profiles` | name, unique permanent student/faculty number, department, program, phone |
 | `departments` | stable department IDs used by profiles and registration |
@@ -336,7 +420,7 @@ Faculty/admin reschedules go directly to `confirmed`. Students can only request 
 | `appointments` | requests, status, schedule, reasons, cancellation/reschedule metadata |
 | `consultation_records` | summary, action items, private notes |
 | `notifications` | in-app messages and read state |
-| `audit_logs` | security/business events; actor may be null for failed logins |
+| `audit_logs` | security/business events; actor may be null for failed logins; indexes support newest-first admin filtering by date, action, and entity, while actor lookups use the foreign-key index |
 | `password_resets` | hashed, expiring, single-use reset codes |
 | `email_verifications` | hashed, expiring, single-use registration verification links |
 | `rate_limits` | login/registration/email-verification/reset throttling |
@@ -356,22 +440,24 @@ Faculty/admin reschedules go directly to `confirmed`. Students can only request 
 - adds `appointments.cancellation_reason` when missing
 - ensures the `email_verifications`, `password_resets`, and `rate_limits` tables exist
 - ensures roles and demo departments exist
-- adds `users.deleted_at`, account ID counters, and unique indexes on student/faculty numbers
+- adds `users.deleted_at`, `users.faculty_approval_status`, account ID counters, and unique indexes on student/faculty numbers
+- adds audit-log indexes on `created_at`, `action`, and `entity_type` when missing; `actor_user_id` already has the foreign-key index
 - assigns STU-/FAC- IDs to missing, malformed, or duplicate legacy profile IDs, preserving one existing ID per duplicate; login email and history are retained
+- resyncs both account-ID sequences to the highest valid existing ID so automatic IDs stay monotonic after imports or repairs
 
 It does **not** reset passwords, delete users, or wipe appointments.
 
-The registration form maps college labels to the seeded department IDs (`ccs`, `coe`, `cba`, `cas`). Keep `departmentIds` in `frontend/src/App.tsx` in sync with the `departments` seed; the register endpoint rejects unknown department IDs.
+The registration form maps college labels to the seeded department IDs (`ccs`, `coe`, `cba`, `cas`). Keep `departmentIds` in `frontend/src/shared/auth.ts` in sync with the `departments` seed; the register endpoint rejects unknown department IDs.
 
 ### Demo accounts
 
 | Role | Email | Password |
 | --- | --- | --- |
-| Administrator | `admin@fcams.edu` | `Admin123!` |
-| Faculty | `elena.cruz@fcams.edu` | `Passw0rd!` |
-| Student | `juan.delacruz@fcams.edu` | `Passw0rd!` |
+| Administrator | `admin@schedwise.edu` | `Admin123!` |
+| Faculty | `elena.cruz@schedwise.edu` | `Passw0rd!` |
+| Student | `juan.delacruz@schedwise.edu` | `Passw0rd!` |
 
-These are local demo credentials only. Change them if the project is shared or exposed.
+These are local demo credentials only. The login screen no longer displays them; use this table for local demo access. Change them if the project is shared or exposed.
 
 ### Clean baseline and maintenance
 
@@ -396,13 +482,13 @@ Create a timestamped backup under `.runtime/backups`:
 C:\xampp\php\php.exe tools\backup-database.php
 ```
 
-Restore a backup (stop **FCAMS** first; destructive, requires `--yes`):
+Restore a backup (stop **SchedWise** first; destructive, requires `--yes`):
 
 ```powershell
-C:\xampp\php\php.exe tools\restore-database.php .runtime\backups\fcams-YYYYMMDD-HHMMSS.sql --yes
+C:\xampp\php\php.exe tools\restore-database.php .runtime\backups\schedwise-YYYYMMDD-HHMMSS.sql --yes
 ```
 
-Backups use `mysqldump --single-transaction --set-gtid-purged=OFF` so they can be restored on the same local MySQL server without GTID conflicts. The scripts find MySQL 9.5 or XAMPP `mysqldump`/`mysql` automatically; set `FCAMS_MYSQLDUMP` or `FCAMS_MYSQL` to override the path.
+Backups use `mysqldump --single-transaction --set-gtid-purged=OFF` so they can be restored on the same local MySQL server without GTID conflicts. The scripts find MySQL 9.5 or XAMPP `mysqldump`/`mysql` automatically; set `SCHEDWISE_MYSQLDUMP` or `SCHEDWISE_MYSQL` to override the path.
 
 ---
 
@@ -416,10 +502,10 @@ All protected endpoints require a session cookie. Unsafe endpoints also require 
 
 | Method | Endpoint | Access | Purpose |
 | --- | --- | --- | --- |
-| POST | `/auth/register.php` | public | Create a pending student account and email a verification link |
-| POST | `/auth/verify-email.php` | public | Consume a verification token, activate the account, and invalidate other links |
-| POST | `/auth/resend-verification.php` | public | Issue a new link for a pending account; generic response to prevent enumeration |
-| POST | `/auth/login.php` | public | Login and issue session/CSRF token; unverified accounts return 403 `email_unverified` |
+| POST | `/auth/register.php` | public | Create a pending student or faculty account, allocate a unique ID, and email a verification link |
+| POST | `/auth/verify-email.php` | public | Consume a verification token and invalidate other links; students activate, while faculty remain pending approval |
+| POST | `/auth/resend-verification.php` | public | Issue a new link for a pending unverified account; generic response to prevent enumeration |
+| POST | `/auth/login.php` | public | Login and issue session/CSRF token; returns 403 `email_unverified`, `faculty_approval_pending`, or `faculty_approval_rejected` when applicable |
 | POST | `/auth/logout.php` | authenticated + CSRF | Destroy session |
 | GET | `/auth/me.php` | authenticated | Current user + CSRF token |
 | POST | `/auth/change-password.php` | authenticated + CSRF | Verify current password and set a new one |
@@ -433,7 +519,15 @@ All protected endpoints require a session cookie. Unsafe endpoints also require 
 | GET | `/users/index.php` | admin | List/search users |
 | GET | `/users/index.php?id=...` | admin or self | Read one profile |
 | POST | `/users/index.php` | admin | Create account |
-| PUT | `/users/index.php?id=...` | admin or self | Update profile; admin can change role/status. Self-service cannot change role/status or institutional numbers |
+| PUT | `/users/index.php?id=...` | admin or self | Update profile; admin can change status. Pending/rejected faculty use `faculty_approval_action` (`approve`/`reject`). Self-service cannot change role/status or institutional numbers |
+
+### Audit log
+
+| Method | Endpoint | Access | Purpose |
+| --- | --- | --- | --- |
+| GET | `/audit/index.php` | admin | Read-only, newest-first audit events. Query parameters: `page`, `per_page` (10–100, default 25), `q`, `action`, `entity_type`, `actor_id`, `date_from`, `date_to`. Returns `entries`, `pagination`, and distinct filter `options`. Invalid dates return 400 |
+
+`old_values` and `new_values` are decoded JSON objects when valid. Keys matching password, token, secret, hash, API-key, reset-code, or verification-code patterns are replaced with `[redacted]` before the response is sent. The response includes actor name/email and truncated entity IDs are rendered by the client; no update or delete route exists for audit rows.
 
 ### Faculty
 
@@ -454,6 +548,7 @@ All protected endpoints require a session cookie. Unsafe endpoints also require 
 | PUT | `/appointments/cancel.php?id=...` | owner/faculty/admin | Cancel with reason |
 | PUT | `/appointments/reschedule.php?id=...` | owner/faculty/admin | Reschedule |
 | PUT | `/appointments/complete.php?id=...` | faculty/admin | Mark completed |
+| PUT | `/appointments/no-show.php?id=...` | faculty/admin | Mark a confirmed appointment as a no-show after its end time |
 
 ### Consultations, notifications, reports
 
@@ -462,9 +557,9 @@ All protected endpoints require a session cookie. Unsafe endpoints also require 
 | GET/POST | `/consultations/index.php` | role-scoped | Read/create consultation records |
 | GET | `/notifications/index.php` | authenticated | Own notifications |
 | PUT | `/notifications/index.php?id=...` or `{mark_all:true}` | authenticated | Mark read |
-| GET | `/reports/summary.php` | authenticated | Role-scoped dashboard summary |
-| GET | `/reports/monthly.php?months=...` | authenticated | Monthly series |
-| GET | `/reports/export.php?format=csv` | authenticated | CSV export |
+| GET | `/reports/summary.php?year=...&month=...&department_id=...&faculty_id=...` | authenticated | Role-scoped dashboard summary; admin filters are optional |
+| GET | `/reports/monthly.php?months=...&end_month=YYYY-MM&department_id=...&faculty_id=...` | authenticated | Six-month series ending at the selected month |
+| GET | `/reports/export.php?format=csv&year=...&month=...&department_id=...&faculty_id=...` | faculty/admin | CSV export using the same report filters |
 | GET | `/health.php` | public | Minimal health status |
 
 ---
@@ -477,9 +572,11 @@ All protected endpoints require a session cookie. Unsafe endpoints also require 
 - Registration requires an institutional email address and a password with at least 8 characters, uppercase, lowercase, a digit, and a special character.
 - The registration form mirrors these checks and displays the API's field-level validation errors; the server remains authoritative.
 - The registration email field deliberately disables browser autofill (`autocomplete="off"`, an explicit field name, and `type="text"` with `inputMode="email"`). Brave 1.97 can crash in its browser process when its email autofill dropdown opens on this form; do not re-enable autofill there without testing Brave.
-- Self-registered students start as `pending`. The verification token is stored only as a SHA-256 hash, expires after 24 hours, is single-use, and is invalidated when a newer link is issued. Opening the link activates the account and sets `email_verified_at`; a successful verification is idempotent for browser retries.
+- Self-registered students and faculty start as `pending`. The verification token is stored only as a SHA-256 hash, expires after 24 hours, is single-use, and is invalidated when a newer link is issued. Opening the link sets `email_verified_at`; students activate immediately, while faculty remain pending until administrator approval. Verification is idempotent for browser retries.
 - Verification links point at the React app (`/?verify_token=...`), which submits the token to the API and removes it from the address bar. The raw token is never logged.
-- Demo accounts are active and verified. Administrator-created accounts are marked email-verified and default to active; an administrator can also create a pending account or activate one manually.
+- Pending and rejected faculty are rejected on every request even if their raw status is active. Approval/rejection is admin-only and uses a separate action so the ordinary status dropdown cannot bypass review.
+- Approval and rejection send a decision email and an in-app notification without exposing tokens or credentials.
+- Demo accounts are active and verified. Administrator-created accounts are marked email-verified, default to active, and are treated as already approved when the role is faculty; an administrator can also create a pending account or activate one manually.
 - Session cookie is HttpOnly, SameSite=Lax, strict mode, and Secure automatically on HTTPS.
 - Session ID is regenerated on login.
 - Idle timeout: 2 hours. Absolute timeout: 12 hours.
@@ -513,7 +610,7 @@ The server checks the current role and ownership on every request. Do not rely o
 - Students can only create appointments for themselves.
 - Students can only read their own consultations.
 - Faculty can only modify their own appointments.
-- Admin-only endpoints are checked server-side.
+- Admin-only endpoints are checked server-side, including the Audit Log reader.
 - `private_notes` are never returned to students.
 
 ### Output and data handling
@@ -529,8 +626,8 @@ The server checks the current role and ownership on every request. Do not rely o
 - HTTP is used locally. Add HTTPS before any shared deployment.
 - `backend/config.php` enables debug locally so password-reset codes and verification links can also be returned to localhost. Never enable debug on an exposed server.
 - Mailpit binds to `127.0.0.1` only. The inbox at `http://localhost:8025` is a local developer tool, not a production mail service.
-- For real email, configure the `FCAMS_MAIL_*` environment variables from the example config. Set `app.frontend_url`/`FCAMS_FRONTEND_URL` to the public frontend origin so verification links are correct.
-- Self-registration requires email verification. If Mailpit is unavailable, the local debug response includes a verification link, and an administrator can activate the pending account manually.
+- For real email, configure the `SCHEDWISE_MAIL_*` environment variables from the example config. Set `app.frontend_url`/`SCHEDWISE_FRONTEND_URL` to the public frontend origin so verification links are correct.
+- Self-registration requires email verification. If Mailpit is unavailable, the local debug response includes a verification link. Faculty approval still requires an administrator decision; approval cannot be completed until verification succeeds.
 - Rate limiting uses `REMOTE_ADDR`; behind a proxy, configure trusted proxy handling first.
 
 ---
@@ -548,7 +645,7 @@ The launcher can start the local MySQL service/direct `mysqld` process, the two 
 
 ### One-click (normal use)
 
-1. Double-click **FCAMS** on the Desktop (green play icon).
+1. Double-click **SchedWise** on the Desktop (green play icon).
 2. The launcher:
    - creates `backend/config.php` and `frontend/.env` if missing
    - starts MySQL if it is not listening
@@ -556,42 +653,42 @@ The launcher can start the local MySQL service/direct `mysqld` process, the two 
    - installs frontend dependencies if `node_modules` is missing
    - starts the PHP API, Vite, and Mailpit hidden
    - opens `http://localhost:5173`
-3. Sign in with a demo account above, or register a student account.
+3. Sign in with a demo account above, or register a student or faculty account.
 4. New registrations are pending until the verification email is opened. Verification and password-reset emails appear in the local Mailpit inbox at `http://localhost:8025`.
-5. To stop the app servers, double-click **STOP FCAMS** on the Desktop (red stop icon). MySQL is intentionally left running.
+5. To stop the app servers, double-click **STOP SchedWise** on the Desktop (red stop icon). MySQL is intentionally left running.
 
-First run may take a few minutes if `npm install` is needed and Mailpit must be downloaded to `.runtime/mailpit`. Later starts are fast. The Mailpit download is pinned to v1.31.6 and requires internet once; if it cannot be downloaded, FCAMS still starts and localhost debug reset codes/verification links remain available.
+First run may take a few minutes if `npm install` is needed and Mailpit must be downloaded to `.runtime/mailpit`. Later starts are fast. The Mailpit download is pinned to v1.31.6 and requires internet once; if it cannot be downloaded, SchedWise still starts and localhost debug reset codes/verification links remain available.
 
 ### Shortcut locations
 
-- `C:\Users\miran\OneDrive\Desktop\FCAMS.lnk` (green play icon)
-- `C:\Users\miran\OneDrive\Desktop\STOP FCAMS.lnk` (red stop icon)
+- `C:\Users\miran\OneDrive\Desktop\SchedWise.lnk` (green play icon)
+- `C:\Users\miran\OneDrive\Desktop\STOP SchedWise.lnk` (red stop icon)
 
 If the shortcuts are missing, recreate them with the paths below:
 
 - Target: `C:\Windows\System32\wscript.exe`
-- Start arguments: `"C:\Users\miran\OneDrive\Desktop\PHP FINAL\tools\fcams-launch.vbs" start`
+- Start arguments: `"C:\Users\miran\OneDrive\Desktop\PHP FINAL\tools\schedwise-launch.vbs" start`
 - Start working directory: `C:\Users\miran\OneDrive\Desktop\PHP FINAL`
-- Stop arguments: `"C:\Users\miran\OneDrive\Desktop\PHP FINAL\tools\fcams-launch.vbs" stop`
+- Stop arguments: `"C:\Users\miran\OneDrive\Desktop\PHP FINAL\tools\schedwise-launch.vbs" stop`
 
 ### Manual start
 
 From PowerShell in the project root:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File tools\fcams-launcher.ps1 start
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\schedwise-launcher.ps1 start
 ```
 
 Start without opening the browser (useful for testing):
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File tools\fcams-launcher.ps1 start -NoBrowser
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\schedwise-launcher.ps1 start -NoBrowser
 ```
 
 Stop:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File tools\fcams-launcher.ps1 stop
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\schedwise-launcher.ps1 stop
 ```
 
 ### Logs
@@ -634,20 +731,22 @@ Then open `http://localhost:5173`.
 
 - `app.debug`: local debug flag; reset codes and verification links are still restricted to localhost
 - `app.frontend_url`: public frontend origin used inside verification emails; defaults to `http://localhost:5173`
+- `app.timezone`: PHP display timezone; defaults to `Asia/Kuala_Lumpur` to match the local MySQL clock. Set `SCHEDWISE_TIMEZONE` for another environment
 - `app.allowed_origins`: front-end origins
 - `db.host`, `db.port`, `db.name`, `db.user`, `db.password`, `db.charset`
 - `mail.host`, `mail.port`, `mail.username`, `mail.password`, `mail.encryption`, `mail.from_email`, `mail.from_name`, `mail.timeout`
 
-SMTP defaults to an empty host/sender, port 587, and TLS. Set the environment variables below, or enter provider values only in ignored `backend/config.php`:
+Local defaults send to Mailpit at `127.0.0.1:1025` with no authentication or encryption and sender `no-reply@schedwise.edu`. For a real provider, set the environment variables below (or equivalent values only in ignored `backend/config.php`); use `tls` for port 587 or `ssl` for port 465.
 
 ```text
-FCAMS_MAIL_HOST=smtp.example.com
-FCAMS_MAIL_PORT=587
-FCAMS_MAIL_USERNAME=...
-FCAMS_MAIL_PASSWORD=...
-FCAMS_MAIL_ENCRYPTION=tls
-FCAMS_MAIL_FROM=no-reply@example.edu
-FCAMS_FRONTEND_URL=https://fcams.example.edu
+SCHEDWISE_MAIL_HOST=smtp.example.com
+SCHEDWISE_MAIL_PORT=587
+SCHEDWISE_MAIL_USERNAME=...
+SCHEDWISE_MAIL_PASSWORD=...
+SCHEDWISE_MAIL_ENCRYPTION=tls
+SCHEDWISE_MAIL_FROM=no-reply@example.edu
+SCHEDWISE_FRONTEND_URL=https://schedwise.example.edu
+SCHEDWISE_TIMEZONE=Asia/Kuala_Lumpur
 ```
 
 Restart the PHP server after changing environment variables. Keep secrets out of `config.php` and source control.
@@ -671,7 +770,7 @@ When adding or changing a feature:
 3. Use the `respond()` / `respondServerError()` response conventions.
 4. Use unique named SQL parameters. Reusing the same placeholder for both a permission scope and a user-supplied filter caused a historical IDOR.
 5. Use `backend/shared/clock.php` for date rules that must match the MySQL clock.
-6. Update `frontend/src/App.tsx`, `frontend/src/api.ts`, and types together.
+6. Update the relevant `frontend/src/features/...` module, shared helpers, `frontend/src/api.ts`, and types together.
 7. Update this README and the TODO list.
 8. Run verification:
 
@@ -686,16 +785,29 @@ npx tsc --noEmit
 # Production build (output is gitignored/regenerable)
 npm run build
 
-# API regression suite (starts FCAMS/Mailpit if needed; temporary data is removed)
+# API regression suite + browser smoke test
+# Starts SchedWise/Mailpit if needed; temporary API data is removed.
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\run-tests.ps1
 
+# Browser smoke test only (SchedWise must already be running; requires installed frontend dependencies)
+cd frontend
+npm run test:browser
+
+# Skip the browser portion when only backend/API coverage is needed
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\run-tests.ps1 -SkipBrowser
+
+# Client-side CSRF retry tests (mocked fetch; no live server required)
+node --test tests\csrf-client.test.mjs
+
 # Smoke test through the real launcher
-powershell -NoProfile -ExecutionPolicy Bypass -File tools\fcams-launcher.ps1 start -NoBrowser
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\schedwise-launcher.ps1 start -NoBrowser
 # open http://localhost:5173, sign in, exercise the changed flow
-powershell -NoProfile -ExecutionPolicy Bypass -File tools\fcams-launcher.ps1 stop
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\schedwise-launcher.ps1 stop
 ```
 
-The API suite creates a unique `e2e.*@fcams.edu` student, checks that login is blocked while pending, tests resend, opens the verification link from Mailpit, verifies the link is idempotent, then reads the reset email and deletes the test user and related rows in `finally`. It requires Mailpit on `127.0.0.1:8025`; `run-tests.ps1` starts the app and Mailpit if they are not running. The suite also signs in with the seeded admin and student accounts, so keep those demo passwords unchanged or update the test fixtures together.
+The API suite creates a unique `e2e.*@schedwise.edu` student, checks that login is blocked while pending, tests resend, opens the verification link from Mailpit, verifies idempotency, resets the password, and deletes test data in `finally`. It also registers two faculty accounts: it verifies that IDs are unique, blocks approval before email verification, confirms login is blocked with `faculty_approval_pending` after verification, approves one account and signs in successfully, then rejects the other and checks `faculty_approval_rejected`; both decision emails are confirmed in Mailpit. It also checks that the audit endpoint is admin-only, paginated, filterable, and rejects malformed dates; that report filters by faculty, department, month, and export scope work and reject unknown filters; that a confirmed future appointment cannot be marked as a no-show before its end time; and that a student reschedule request becomes `reschedule_requested` and can be approved by the faculty member. A dedicated state-transition case covers pending/confirmed/completed/rejected/cancelled guards, cancel and reject reason requirements, direct faculty reschedules, cross-account reschedule authorization, invalid and past reschedule dates, unavailable slots, faculty overlaps (`409`), and approval failing when availability is blocked after a student request. The consultation-privacy case also verifies that appointment lists embed the shared `summary` but never `action_items` or `private_notes`. It requires Mailpit on `127.0.0.1:8025`; `run-tests.ps1` starts the app and Mailpit if they are not running. The suite also signs in with the seeded admin, faculty, and student accounts, so keep those demo passwords unchanged or update the test fixtures together.
+
+The browser smoke test uses `playwright-core` and launches an installed Chromium-based browser (Brave first, then Chrome, then Edge). It checks the purple primary action, empty login validation, privacy disclosure placement on registration (and its absence from dashboards plus presence under Account Settings > Privacy), and registers a new `e2e.browser.*` faculty account through the UI. It retrieves the verification link from Mailpit, confirms the pre-approval login block, signs in as the seeded administrator, approves the pending faculty member through User Management, and verifies the new account can sign in. The new faculty account opens the notification inbox, confirms the approval notice, and marks all notifications read. The test then validates dashboard card navigation, availability setup, student registration/booking, student reschedule, notification delivery, faculty approval/completion through the API, consultation feedback in **My History**, admin user search-as-you-type, appointment filters, Audit Log filtering, report department/faculty filters, the filtered CSV export link, sign-out cancellation, and student/faculty role routing. If no supported browser is found, the test skips with a message; set `SCHEDWISE_BROWSER_PATH` to override the executable. The client CSRF suite is separate and does not require the app to be running.
 
 Before a destructive demo reset, take a backup. Do not commit generated `frontend/dist`, `.runtime`, `backend/config.php`, or `frontend/.env`.
 
@@ -709,7 +821,7 @@ Use this before handing the project to someone:
 - [ ] The launcher prerequisite dialog appears clearly for missing/old PHP, Node.js/npm, or MySQL instead of a raw error.
 - [ ] `npx tsc --noEmit` passes.
 - [ ] `npm run build` passes.
-- [ ] `FCAMS` shortcut starts the app without a terminal.
+- [ ] `SchedWise` shortcut starts the app without a terminal.
 - [ ] Login works through `http://localhost:5173/api`.
 - [ ] A mutation without a CSRF token returns 403.
 - [ ] Student cannot read another student's consultations or private notes.
@@ -720,17 +832,35 @@ Use this before handing the project to someone:
 - [ ] A reset code is single-use and expires after 30 minutes.
 - [ ] Registration shows clear errors for a non-institutional email, weak password, and first-name-only input.
 - [ ] Typing in the registration email field does not open a browser autofill dropdown in Brave, and the custom non-institutional email error still appears.
-- [ ] A successful registration creates a `pending` account, lands on login with the email prefilled, and shows the check-email notice.
+- [ ] A successful student registration creates a `pending` account with a generated `STU-` ID, lands on login with the email prefilled, and shows the check-email notice.
+- [ ] A successful faculty registration creates a `pending` account with a generated `FAC-` ID, displays the approval requirement, and sends a faculty-specific verification email.
 - [ ] Unverified login is rejected with the resend prompt; resend sends a fresh link and invalidates the old one.
-- [ ] Opening the verification link from Mailpit activates the account, shows the success notice, and removes `verify_token` from the address bar.
+- [ ] Opening a student verification link from Mailpit activates the account, shows the success notice, and removes `verify_token` from the address bar.
+- [ ] Opening a faculty verification link verifies the email but leaves login blocked with `faculty_approval_pending`; approval is disabled in User Management until verification completes.
+- [ ] Admin approval sends a decision email and notification, and the teacher can then sign in to the Faculty Dashboard. Rejection blocks login with `faculty_approval_rejected`.
 - [ ] Re-opening the same verification link is harmless for the verified account, while a different invalid token is rejected.
+- [ ] Automatic STU/FAC IDs are unique and sequential; manually supplied IDs advance the sequence, and duplicate IDs are rejected.
+- [ ] The Admin **Audit Log** is visible only to administrators; search, action/entity/date filters, and pagination work, and malformed dates are rejected.
+- [ ] Appointment lists filter by search/status/date and paginate; clearing filters restores the role-scoped list.
+- [ ] System Analytics filters by month, department, and faculty; the chart and CSV link follow the selected scope and unknown filters are rejected.
+- [ ] A confirmed appointment can be marked `no_show` only after its end time; the student receives an in-app notification and final appointments cannot be rescheduled or cancelled.
+- [ ] A `reschedule_requested` appointment shows the requested date/time and student note; approval is labelled as confirming the new time; a server conflict keeps the reschedule form open with retry and choose-another-time actions.
+- [ ] The student **My Appointments** dialog cancels with a required reason, requests a new time from live slots, and updates the list/counts without a reload.
+- [ ] The header notification inbox shows the unread count, opens for every role, marks one or all messages read, and refreshes after approvals/completions.
+- [ ] **My History** shows only past/finished appointments and opens the shared consultation summary, action items, and follow-up date; private notes never appear.
+- [ ] Faculty decline and cancel forms reject an empty reason and show server errors inline; saved consultation forms do not allow a duplicate create.
+- [ ] The privacy notice appears during registration and under Account Settings > Privacy, and not on any dashboard.
+- [ ] PHP reports `Asia/Kuala_Lumpur` (or the configured `SCHEDWISE_TIMEZONE`) and formatted dates match MySQL's local clock.
+- [ ] Empty appointment/user/report/history/audit views explain the next action, and a clean database shows the Admin first-run setup panel.
 - [ ] Account settings can update the signed-in user's profile.
 - [ ] A signed-in password change accepts the new password, rejects the old one, and keeps the current session valid.
-- [ ] `tools/run-tests.ps1` passes all API tests.
+- [ ] `tools/run-tests.ps1` passes all API tests and the browser smoke test.
+- [ ] `tools/run-tests.ps1 -SkipBrowser` passes the API suite without requiring a browser.
+- [ ] `node --test tests\csrf-client.test.mjs` passes all client CSRF retry tests.
 - [ ] A backup can be created and restored after stopping the app.
-- [ ] Stopping via `STOP FCAMS` closes ports 8000, 5173, and 1025/8025 (Mailpit), leaving MySQL running.
+- [ ] Stopping via `STOP SchedWise` closes ports 8000, 5173, and 1025/8025 (Mailpit), leaving MySQL running.
 
-**Last verified:** 2026-10-20 — PHP lint passed; `tsc --noEmit` and Vite build passed; the API suite passed 9/9 tests covering health, login/logout, CSRF rejection, role scoping, registration validation, pending-login rejection, resend, Mailpit verification-link activation and idempotency, single-use reset, booking, profile update, and signed-in password change; a headless-browser check opened a real verification email link, showed the success notice on the login screen, and removed the token from the address bar. The registration autofill workaround was verified in Brave: the email field renders with `type=text`, `inputMode=email`, `autocomplete=off`, and `name=fcams_registration_email`, the form is `autocomplete=off`, and an invalid institutional email still shows the client-side validation message. The launcher start path passed its PHP 8.0.30/Node 25.9.0/npm/MySQL preflight, returned exit code 0, and the backend health/frontend checks returned healthy/200. Mailpit was started by the launcher on port 1025/8025; demo reset produced 3 users/4 departments/10 availability rows; a GTID-safe backup was created and restored. The desktop shortcut start/stop flow was verified in the earlier pass; run the shortcut checklist again after changing launcher or Mailpit code.
+**Last verified:** 2026-10-22 — student self-service, notification, and consultation-feedback pass completed. PHP syntax checks passed for every PHP file in `backend`, `tools`, and `tests`; `npx tsc --noEmit` and the Vite production build passed; the API regression suite passed 16/16 tests, including shared-summary embedding with private notes excluded; the client CSRF suite passed 4/4 tests; and the committed Playwright browser smoke test passed 1/1 against headless Brave (privacy placement, purple-theme styling, dashboard card navigation, faculty registration with Mailpit verification, administrator approval, notification inbox/mark-all-read, sign-out cancellation, admin user search, appointment filters, student cancel/reschedule, consultation feedback, Audit Log filtering, report filters/export, role routing, zero page exceptions). Test cleanup left no `e2e.*` accounts or test-created appointments/overrides; the intentional non-test local account and its demo data were left untouched, and the clean seed still provides 10 availability rows. The pre-migration database backup is at `.runtime/backups/pre-schedwise-migration.sql`. Desktop shortcuts remain `SchedWise.lnk` and `STOP SchedWise.lnk`.
 
 ---
 
@@ -742,19 +872,23 @@ Open `http://localhost:5173` manually after a few seconds. Check `.runtime/logs/
 
 ### Port 5173 or 8000 is already in use
 
-Run **STOP FCAMS**. If that does not help, close the other Vite/PHP process or reboot. The launcher uses strict ports so it fails clearly instead of silently moving to another port.
+Run **STOP SchedWise**. If that does not help, close the other Vite/PHP process or reboot. The launcher uses strict ports so it fails clearly instead of silently moving to another port.
 
 ### MySQL is not running
 
-Start the `MySQL95` Windows service or MySQL from XAMPP, then click **FCAMS** again. The launcher also attempts the service and a direct `mysqld` start before showing the prerequisite dialog with the XAMPP download option.
+Start the `MySQL95` Windows service or MySQL from XAMPP, then click **SchedWise** again. The launcher also attempts the service and a direct `mysqld` start before showing the prerequisite dialog with the XAMPP download option.
 
 ### PHP, Node.js, or npm is missing or too old
 
-The launcher checks for PHP 8.0+, Node.js 20.19+ or 22.12+, and npm before starting. The dialog explains what was found, what is required, and offers to open the XAMPP or Node.js download page. Install the prerequisite, then click **FCAMS** again. This check is separate from `npm install`, which retries automatically when `frontend/node_modules` is missing.
+The launcher checks for PHP 8.0+, Node.js 20.19+ or 22.12+, and npm before starting. The dialog explains what was found, what is required, and offers to open the XAMPP or Node.js download page. Install the prerequisite, then click **SchedWise** again. This check is separate from `npm install`, which retries automatically when `frontend/node_modules` is missing.
 
 ### Brave closes while typing in the registration email field
 
 Brave 1.97 can crash inside its own autofill/password-manager UI when an email suggestion opens. The registration form deliberately opts out of autofill on the email field; keep its `autoComplete="off"`, explicit `name`, and `inputMode="email"` settings. If Brave still closes, turn off address/email autofill at `brave://settings/autofill` and password suggestions at `brave://settings/passwords`, test Incognito with extensions disabled, and check `brave://settings/help` for an update. The PHP API is not involved until **Register** is submitted.
+
+### The browser smoke test skips or cannot launch a browser
+
+Run `npm install` in `frontend` so `playwright-core` is present, then run `tools\run-tests.ps1` or `npm run test:browser` from `frontend` while SchedWise is running. The test auto-detects Brave, Chrome, and Edge on Windows. Set `SCHEDWISE_BROWSER_PATH` to a full executable path if the browser is installed elsewhere. A skip message is expected when no supported Chromium-based browser exists; the API suite can still be run with `-SkipBrowser`.
 
 ### Login works but API calls fail
 
@@ -766,7 +900,7 @@ Read `.runtime/logs/database.log`. Verify `backend/config.php` credentials and t
 
 ### `npm install` fails
 
-Install Node.js 20.19+ (or 22.12+) and npm, then run **FCAMS** again. Check `.runtime/logs/npm-install.err.log`.
+Install Node.js 20.19+ (or 22.12+) and npm, then run **SchedWise** again. Check `.runtime/logs/npm-install.err.log`.
 
 ### Password reset email does not appear
 
@@ -774,11 +908,11 @@ Open the Mailpit inbox at `http://localhost:8025`. If the page is unavailable, c
 
 ### Verification email does not appear
 
-Confirm the account is still `pending` and check the Mailpit inbox. Use **Resend verification email** on the login screen; each new link invalidates older links and expires after 24 hours. In local debug mode, the API returns a localhost-only `debug_verification_url` that the login screen shows as a fallback link. If Mailpit cannot run, an administrator can activate the account manually from user management, or use the debug link.
+Confirm the account is still `pending` and check the Mailpit inbox. Use **Resend verification email** on the login screen; each new link invalidates older links and expires after 24 hours. In local debug mode, the API returns a localhost-only `debug_verification_url` that the login screen shows as a fallback link. If Mailpit cannot run, an administrator can activate a student account manually from user management or use the debug link. A self-registered faculty account must verify its email before approval; an administrator cannot approve it early.
 
 ### Backup or restore fails
 
-Use the MySQL 9.5 or XAMPP client tools, or set `FCAMS_MYSQLDUMP`/`FCAMS_MYSQL`. Stop **FCAMS** before restoring. Backups are created with `--set-gtid-purged=OFF`; if you restore an older dump that still contains a GTID line, MySQL will reject it with error 3546. Take a new backup with the current script instead.
+Use the MySQL 9.5 or XAMPP client tools, or set `SCHEDWISE_MYSQLDUMP`/`SCHEDWISE_MYSQL`. Stop **SchedWise** before restoring. Backups are created with `--set-gtid-purged=OFF`; if you restore an older dump that still contains a GTID line, MySQL will reject it with error 3546. Take a new backup with the current script instead.
 
 ### Account settings changes do not appear
 
@@ -797,9 +931,11 @@ Read in this order:
 5. `backend/shared/authorization.php`
 6. `backend/shared/verification.php`
 7. `backend/shared/mailer.php`
-8. `tests/api.test.mjs`
-9. `frontend/src/api.ts`
-10. `frontend/src/App.tsx`
+8. `backend/audit/index.php`
+9. `tests/api.test.mjs`
+10. `frontend/tests/browser-smoke.test.mjs`
+11. `frontend/src/api.ts`
+12. `frontend/src/shared/` and `frontend/src/features/`
 
 Non-negotiable invariants:
 
@@ -808,7 +944,9 @@ Non-negotiable invariants:
 - Unsafe browser requests carry `X-CSRF-Token`.
 - Students never receive `private_notes`.
 - Student filters cannot override role scoping.
-- Self-registered students stay pending until email verification; never auto-activate them in registration code.
+- Audit rows are administrator-only, read-only, and must not expose passwords, tokens, or other secrets in summaries.
+- Self-registered students stay pending until email verification; self-registered faculty stay pending until email verification **and** administrator approval. Never auto-activate either role in registration code.
+- Pending/rejected faculty cannot be activated through the generic status dropdown or an active status alone; use the explicit approval action after verification.
 - Verification and reset tokens are stored only as hashes, expire, are single-use (verification is idempotent only for an already verified account), and must never be logged.
 - Date rules use `less than`/`greater than` carefully; appointment conflicts use half-open interval overlap.
 - Do not reintroduce demo fallbacks, localStorage mocks, hard-coded statistics, or the deleted unauthenticated `backend/appointments.php`.
@@ -817,20 +955,103 @@ Non-negotiable invariants:
 
 Known risk areas:
 
-- `frontend/src/App.tsx` is very large; refactor only with a clear plan and test the role flows afterward.
+- Keep feature code inside `frontend/src/features/...` and shared primitives inside `frontend/src/shared/`; run the role flows and full test suite after moving components between modules.
 - Brave 1.97 can crash in its own autofill UI on the registration form. The email input is intentionally opted out of autofill; test Brave again before restoring autofill behavior.
-- Email verification depends on Mailpit in local use. The localhost debug fallback and manual admin activation are intentional recovery paths, not a replacement for real SMTP in a shared environment.
+- Email verification depends on Mailpit in local use. The localhost debug fallback and manual admin activation are intentional recovery paths for student accounts; self-registered faculty still need verification before approval. This is not a replacement for real SMTP in a shared environment.
 - The one-click launcher is Windows-specific and assumes XAMPP PHP + a local MySQL installation. Document any path changes.
 - The local database uses the root account with an empty password. Change it if the machine is shared.
 - PHPMailer is vendored manually (7.1.1) because Composer is not part of the one-click stack. Update `backend/vendor/phpmailer` and its `VERSION`/`LICENSE` together if a security release requires it.
 - Mailpit is downloaded from a pinned GitHub release into `.runtime/mailpit` on first launch. If the download is blocked, local email delivery is unavailable until the binary is supplied manually.
+- Browser smoke tests require `frontend/node_modules/playwright-core` and a local Chromium-based browser. They launch an installed Brave/Chrome/Edge executable rather than downloading a browser; set `SCHEDWISE_BROWSER_PATH` if auto-detection fails.
 - `tools/reset-demo.php` and `tools/restore-database.php` are destructive; keep the `--yes` guard and take a backup before using either.
 
 ---
 
 ## 15. Change Log
 
+### 2026-10-22
+
+#### Student self-service, notification inbox, and consultation feedback
+
+- Added `frontend/src/features/appointments/StudentAppointmentDialog.tsx` and student actions in `AppointmentListView.tsx`. Students can cancel or request a new time from **My Appointments** with a required reason, confirmation, live faculty-slot selection, conflict handling, and a **Refresh available times** retry. Successful actions update the role-scoped appointment cache and dashboard counts.
+- Added **My Appointments** to student navigation and retained the existing total-list behavior. **My History** now limits results to past or terminal appointments, uses shared status labels/tones, uses unique row keys, and shows **No feedback** only for completed appointments.
+- Fixed student consultation history: it now loads `/consultations/index.php` for the signed-in student and displays the shared summary, action items, and follow-up date. Appointment list/single responses now include the shared consultation `summary` via a left join; `private_notes` is never selected. The faculty calendar panel freezes a saved record to prevent duplicate creation and points to **Consultation Records** for the full record.
+- Added a shared header notification inbox (`frontend/src/shared/NotificationsButton.tsx`) for students, faculty, and administrators. It shows unread counts, loads on mount/focus/open, polls every 60 seconds, supports individual and bulk mark-read, and renders clear loading/error/empty states.
+- Added a required-reason decline dialog to the faculty request queue, showing the student's reschedule note and keeping accept/decline loading and error states in place. Replaced the hard-coded faculty cancellation reason with an inline required-reason form and confirmation in the appointment panel.
+- Fixed `Button` to forward native HTML attributes such as `aria-label`, added accessible labels/dialog semantics to the new actions, and made the notification dialog render through a portal so the main content cannot intercept clicks.
+- Expanded `frontend/tests/browser-smoke.test.mjs` to cover the notification inbox and mark-all-read, student cancel, student reschedule, and student consultation feedback (faculty approval/completion/consultation creation through the API fixture). Added `ApiClient` fixtures for the temporary student/faculty pair and availability override.
+- Updated `tools/test-cleanup.php` to remove schedule-override audit rows and report override counts for test-created data.
+- Updated README feature, roles, API, UI, testing, TODO, verification, and changelog sections.
+- Added a **Production Backend Backlog** to the high-priority TODO. It separates the completed local demo from production P0 work (email outbox/retry, runtime and database security, backup/restore and retention, concurrency/integrity, monitoring, server-side pagination), P1 features (consultation editing, scheduled jobs, export/deletion, versioned migrations, email notifications), and smaller P2 follow-ups.
+
+#### P1 coverage and reschedule UX
+
+- Expanded `frontend/tests/browser-smoke.test.mjs` with privacy placement on registration and Account Settings, dashboard stat-card navigation, faculty self-registration through the real form, Mailpit verification, pre-approval login blocking, administrator approval, purple-theme checks, and sign-in verification for the newly approved faculty account. Test-created accounts use the `e2e.browser.*` prefix and are removed in `finally`.
+- Added an API regression case for the remaining appointment lifecycle: pending/confirmed/completed/rejected/cancelled transitions, cancel/reject reason requirements, repeat-action guards, direct faculty reschedules, cross-account reschedule authorization, invalid/past dates, unavailable slots, faculty overlaps, and approval conflicts after availability is blocked following a student request.
+- Updated the faculty appointment panel to show the requested date/time and student note for `reschedule_requested` appointments, label approval as **Approve New Time**, keep server reschedule errors inside the reschedule form, and offer **Retry same time** / **Choose another time** actions. Appointment lists also show the reschedule-request note.
+- Updated student booking conflicts to offer a **Refresh available times** retry against the live faculty-slot endpoint instead of leaving only a static error. A successful refresh clears the conflict state and prompts the student to choose another slot.
+- Updated README feature, API/testing, TODO, verification, and changelog sections. The API suite now passes 16/16, the client CSRF suite 4/4, and the browser smoke test 1/1; PHP lint, TypeScript checking, and the production build pass.
+
+#### SchedWise rebrand and frontend module split
+
+- Renamed the system to **SchedWise** in the UI, browser title, email templates/subjects/body, API error messages, launcher dialogs, scripts, README, and demo accounts.
+- Renamed configuration variables from `FCAMS_*` to `SCHEDWISE_*`, the session cookie to `SCHEDWISESESSID`, browser events to `schedwise:*`, CSV exports to `schedwise-appointments-*.csv`, backups to `schedwise-*.sql`, and the local database to `schedwise`.
+- Migrated the existing local database from `fcams` to `schedwise` with user and appointment counts preserved; demo addresses now use `@schedwise.edu`.
+- A pre-migration backup is stored at `.runtime/backups/pre-schedwise-migration.sql`. Because the migrated local database contained stale altered demo accounts and orphaned availability, it was then reset to the documented clean demo baseline (3 users, 0 appointments, 10 availability rows).
+- Renamed the launcher files to `tools/schedwise-launcher.ps1` and `tools/schedwise-launch.vbs`, with matching SchedWise desktop shortcuts and icons.
+- Split `frontend/src/App.tsx` (5,602 lines) into a 118-line root shell plus `frontend/src/shared/` primitives and `frontend/src/features/` modules for auth, student, faculty, admin, appointments, account, and legal content. No API or behavior changes were intended.
+- Updated README folder map, development workflow, handoff notes, TODO, and rebrand/testing details.
+
+#### Report filters, no-show workflow, timezone normalization, and browser coverage
+
+- Added `backend/shared/report_filters.php` to build role-scoped report conditions and validate optional administrator `department_id`/`faculty_id` filters against active departments and non-deleted faculty accounts.
+- Extended `GET /reports/summary.php`, `GET /reports/monthly.php`, and `GET /reports/export.php` with shared department/faculty filters. `monthly.php` also accepts `end_month=YYYY-MM` and anchors the six-month series to the selected month. CSV export uses exactly the same filter scope and returns filters in JSON mode.
+- Added the System Analytics filter bar (month, department, faculty, clear, export) and wired the summary, chart, and CSV link to the same state. Changing department clears a faculty selection that no longer belongs to the scope.
+- Added `PUT /appointments/no-show.php`. It permits faculty/admin users to mark only confirmed appointments as `no_show` after the database-clock end time, writes an audit entry, and notifies the student. The appointment panel shows **Mark no-show** only when the consultation has ended; admin/faculty appointment lists expose the same action.
+- Final appointment states (`cancelled`, `rejected`, `completed`, `no_show`) now hide approve/reschedule/cancel actions and show a read-only status instead.
+- Fixed the reschedule-request approval control: `reschedule_requested` appointments now show an enabled switch and specific confirmation text instead of appearing locked like a confirmed appointment.
+- Added API coverage for a student reschedule request and faculty approval of the requested time.
+- Added polite live regions to filtered appointment counts, audit result counts, and the report filter summary so assistive technology announces updates.
+- Added `app.timezone`/`SCHEDWISE_TIMEZONE` to `backend/config.example.php` and bootstrap. PHP now defaults to `Asia/Kuala_Lumpur`, matching the local MySQL clock while `backend/shared/clock.php` remains authoritative for business-date rules.
+- Expanded `frontend/tests/browser-smoke.test.mjs` to cover empty-login validation, sign-out cancellation, System Analytics department/faculty filters, and the filtered export link.
+- Updated the API regression suite from 14 to 15 tests with report-filter validation, export scope, and early no-show rejection.
+- Verified the successful no-show path with a temporary confirmed past appointment: the faculty session received `200` and `no_show`, and the temporary appointment, notification, and audit rows were removed afterward.
+- Updated README API/config/testing sections and the high-priority TODO list.
+
 ### 2026-10-21
+
+#### Admin audit viewer, appointment filters, empty states, and browser smoke tests
+
+- Added `GET /audit/index.php`, an administrator-only read-only endpoint with newest-first pagination (`page`, `per_page`), search (`q`), action/entity/actor filters, date-range validation, decoded `old_values`/`new_values`, and distinct filter options. `backend/audit/index.php` uses the existing `audit_logs` table without adding a write path.
+- Added three audit-log indexes to `database.sql` and the idempotent setup migration: `created_at`, `action`, and `entity_type`; actor filtering uses the existing foreign-key index.
+- Added the Admin **Audit Log** view with search, action/entity/date filters, refresh, result counts, 25-entry pages, and summarized change details. Actor and IP context are shown, while entity IDs are shortened in the table. Password/token/secret-like keys in old/new values are redacted server-side.
+- Added appointment search (student/faculty/topic/reason/status/date), status and From/To date filters, visible/total counts, and 8-row client-side pagination to the shared appointment list. Filtering stays within the role-scoped API result set.
+- Added guided empty states to appointment lists, the Master User List, the monthly report, consultation history, faculty request queues, and the Audit Log. Added a first-run Admin Dashboard panel when only the administrator account exists.
+- Added `frontend/tests/browser-smoke.test.mjs` with `playwright-core`, plus `npm run test:browser`. The test auto-detects Brave/Chrome/Edge, signs in as the seeded admin, verifies user search-as-you-type, appointment filtering, Audit Log filtering, sign-out, and seeded student/faculty routing. `tools/run-tests.ps1` now runs it after the API suite unless `-SkipBrowser` is passed; missing frontend dependencies or browsers produce a skip instead of a false failure.
+- Updated the API regression suite from 13 to 14 tests with admin-only audit access, pagination/filtering, and malformed-date coverage.
+- Last verified 2026-10-21: setup migration applied; PHP lint, `tsc --noEmit`, Vite production build, 14/14 API tests, 4/4 client CSRF tests, and 1/1 Playwright browser smoke test passed. The browser run produced zero JavaScript page exceptions.
+
+#### Faculty self-registration, approval, and unique IDs
+
+- Added `users.faculty_approval_status` (`not_required`, `pending`, `approved`, `rejected`) to `database.sql` and the additive setup migration. Existing faculty are marked approved when the column is first added.
+- Public registration now accepts `student` or `faculty`. Both roles receive an automatically allocated, permanent, unique `STU-`/`FAC-` ID. Faculty profiles require a department and remain `pending` after email verification until an administrator decides.
+- Added faculty-specific verification email text, approval/rejection emails, and in-app notifications.
+- Login reports `faculty_approval_pending` after correct credentials and verified email, and `faculty_approval_rejected` after rejection. Pending/rejected faculty sessions are also refused by `authenticateUser()`.
+- User Management shows a **Faculty approvals** panel. Approve is disabled until email verification; pending faculty cannot be activated through the generic status dropdown. `PUT /users/index.php?id=…` accepts `faculty_approval_action`.
+- Hardened the ID allocator: automatic IDs are sequence-backed, unique indexes remain enforced, manually supplied IDs advance the sequence, and setup resyncs sequences to the highest stored ID.
+- Updated the API regression suite to 13 tests at that stage (now 14) and added the faculty approval/rejection flow and unique-ID assertions.
+- Last verified 2026-10-21: additive database migration and sequence resync applied to the local database with a fresh pre-migration backup; PHP lint, TypeScript check, Vite production build, 13/13 API tests at that stage, 4/4 client CSRF tests, Mailpit fixture and decision-email checks, and a full headless Brave faculty onboarding/approval/dashboard flow passed with zero JavaScript exceptions. Multi-worker concurrency coverage remains pending.
+
+#### Pending-approval visibility and login polish
+
+- The Admin Dashboard Faculty card now turns amber and shows `N awaiting approval` while faculty registrations are waiting. **User Management** shows an amber count badge, and both open the existing **Faculty approvals** panel.
+- Removed the hard-coded demo administrator credentials from the login screen. Demo credentials remain documented in the Demo accounts section.
+- Last verified 2026-10-21: `npx tsc --noEmit` and `npm run build` passed after the change. No backend, API, schema, or launcher changes were made.
+
+#### Admin user search as you type
+
+- The Master User List now debounces search input by 250 ms and ignores stale responses, so names and emails appear without pressing Enter.
+- Last verified 2026-10-21: `npx tsc --noEmit` and `npm run build` passed. A headless Brave check signed in as the seeded administrator and typed `elena` into the Master User List; the result count changed to one account without a keyboard submit. No backend, API, schema, or launcher changes were made.
 
 - Fixed launcher sessions failing with permission denied under LocalAppData: local sessions now use the project's gitignored `.runtime/sessions` directory, outside the backend document root, with the PHP `-d` argument quoted for paths with spaces. Restart the launcher and sign in again after upgrading; old sessions are not migrated.
 - PHP now returns 503 if session storage cannot open instead of reporting successful login without a persistent session. The frontend returns to sign-in when a protected endpoint reports 401.
@@ -926,7 +1147,7 @@ Private notes are protected by application authorization, not field encryption; 
 
 - Removed automatic Mailpit download and startup. Existing tracked-process cleanup remains compatible with old launcher state.
 - Removed inbox links and debug-code/verification-link UI. Local configuration now uses provider environment variables and disables debug token responses; database credentials are unchanged.
-- Configure `FCAMS_MAIL_HOST`, `FCAMS_MAIL_PORT` (usually 587), `FCAMS_MAIL_USERNAME`, `FCAMS_MAIL_PASSWORD`, `FCAMS_MAIL_ENCRYPTION` (`tls` or `ssl`), and `FCAMS_MAIL_FROM` (a sender authorized by your provider). `FCAMS_FRONTEND_URL` must be the address recipients can open for verification. Alternatively, set equivalent values in ignored `backend/config.php`; never commit credentials.
+- Configure `SCHEDWISE_MAIL_HOST`, `SCHEDWISE_MAIL_PORT` (usually 587), `SCHEDWISE_MAIL_USERNAME`, `SCHEDWISE_MAIL_PASSWORD`, `SCHEDWISE_MAIL_ENCRYPTION` (`tls` or `ssl`), and `SCHEDWISE_MAIL_FROM` (a sender authorized by your provider). `SCHEDWISE_FRONTEND_URL` must be the address recipients can open for verification. Alternatively, set equivalent values in ignored `backend/config.php`; never commit credentials.
 - Restart the PHP backend after changing process environment variables. Keep `app.debug` false for real delivery. Registration stays pending until verification; no SMTP credentials are configured by this change.
 - Remote SMTP requires encrypted transport. There is no fallback to local Mailpit or to showing reset codes in the UI. The SMTP provider determines cost and sending limits; this code does not create a paid subscription.
 - The full API/email suite requires a separately started local Mailpit fixture and explicitly configured local test mail/debug settings. Its preflight now refuses real SMTP settings to avoid sending test messages to real recipients. Do not run the full email suite against real mail credentials.
@@ -944,3 +1165,11 @@ Private notes are protected by application authorization, not field encryption; 
 
 - Admin account creation displays a fixed FAC- or STU- prefix and an editable digits-only suffix. Leading zeroes are preserved; supply at least four digits or leave the suffix blank to generate a unique ID. The API continues to receive the full prefixed ID, reject duplicates, and prevent changes after creation.
 - Last verified 2026-10-21: TypeScript, production build, and API regressions passed. Browser interaction coverage remains pending; high-priority TODO unchanged.
+
+
+### Team snapshot integration - 2026-10-21
+
+- Imported the team's updated snapshot, including permanent account roles/IDs, email-only login, account deletion with history preservation, real faculty slot selection, shared confirmation dialogs, clickable dashboard cards, the purple theme, expanded API/client tests, and updated documentation. The Brave registration autofill workaround remains in place.
+- Preserved the ignored local `backend/config.php`, `frontend/.env`, `.runtime/` data, and existing MySQL records. The setup migration only added `users.deleted_at`, permanent unique profile IDs, and account-ID sequences; it did not reset passwords or delete accounts, appointments, or audit history.
+- Updated the README's current email/config statements to match the restored local Mailpit setup. Real SMTP is optional through `SCHEDWISE_MAIL_*`, not required for local use.
+- Last verified 2026-10-21: PHP lint, TypeScript check, production build, 12/12 API tests at that stage, 4/4 client CSRF tests, launcher stop/start, Mailpit fixture, and a Brave role-routing plus confirmation-dialog smoke check all passed. Browser automation and multi-worker concurrency coverage were still pending at that stage.

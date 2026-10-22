@@ -30,7 +30,7 @@ function Show-Failure {
     Add-Type -AssemblyName System.Windows.Forms
     [System.Windows.Forms.MessageBox]::Show(
         "$Message`n`nLogs: $LogDir",
-        'FCAMS',
+        'SchedWise',
         [System.Windows.Forms.MessageBoxButtons]::OK,
         [System.Windows.Forms.MessageBoxIcon]::Error
     ) | Out-Null
@@ -42,7 +42,7 @@ function Show-Warning {
     Add-Type -AssemblyName System.Windows.Forms
     [System.Windows.Forms.MessageBox]::Show(
         "$Message`n`nLogs: $LogDir",
-        'FCAMS',
+        'SchedWise',
         [System.Windows.Forms.MessageBoxButtons]::OK,
         [System.Windows.Forms.MessageBoxIcon]::Warning
     ) | Out-Null
@@ -55,8 +55,8 @@ function New-DependencyException {
         [string]$HelpUrl
     )
     $exception = [System.Exception]::new($Message)
-    $exception.Data['FCAMS_DEPENDENCY'] = $Kind
-    $exception.Data['FCAMS_HELP_URL'] = $HelpUrl
+    $exception.Data['SCHEDWISE_DEPENDENCY'] = $Kind
+    $exception.Data['SCHEDWISE_HELP_URL'] = $HelpUrl
     return $exception
 }
 
@@ -68,10 +68,10 @@ function Show-DependencyHelp {
     )
     Write-Log "PREREQUISITE: $Kind - $Message"
     Add-Type -AssemblyName System.Windows.Forms
-    $prompt = "$Message`n`nAfter installing, double-click FCAMS again.`n`nLogs: $LogDir"
+    $prompt = "$Message`n`nAfter installing, double-click SchedWise again.`n`nLogs: $LogDir"
     $answer = [System.Windows.Forms.MessageBox]::Show(
         $prompt,
-        "FCAMS - $Kind required",
+        "SchedWise - $Kind required",
         [System.Windows.Forms.MessageBoxButtons]::YesNo,
         [System.Windows.Forms.MessageBoxIcon]::Warning
     )
@@ -196,13 +196,13 @@ function Find-Php {
                 if ($version -match '^(\d+)\.' -and [int]$Matches[1] -lt 8) {
                     throw (New-DependencyException `
                         -Kind 'PHP 8+' `
-                        -Message "PHP $version was found at $candidate, but FCAMS requires PHP 8.0 or newer." `
+                        -Message "PHP $version was found at $candidate, but SchedWise requires PHP 8.0 or newer." `
                         -HelpUrl 'https://www.apachefriends.org/download.html')
                 }
             } catch {
                 # If the version probe itself failed, continue and let PHP
                 # report the real problem instead of blocking startup.
-                if ($_.Exception.Data['FCAMS_DEPENDENCY']) {
+                if ($_.Exception.Data['SCHEDWISE_DEPENDENCY']) {
                     throw
                 }
             }
@@ -240,7 +240,7 @@ function Find-Node {
     if ($version -and -not (Test-NodeVersionSupported -Version $version)) {
         throw (New-DependencyException `
             -Kind 'Node.js' `
-            -Message "Node.js $version was found at $nodePath, but FCAMS requires Node.js 20.19+ or 22.12+. Install a current LTS release." `
+            -Message "Node.js $version was found at $nodePath, but SchedWise requires Node.js 20.19+ or 22.12+. Install a current LTS release." `
             -HelpUrl 'https://nodejs.org/en/download')
     }
 
@@ -449,7 +449,7 @@ function Start-Frontend {
 
 function Stop-TrackedProcesses {
     if (-not (Test-Path -LiteralPath $PidFile)) {
-        Write-Log 'No tracked FCAMS processes to stop.'
+        Write-Log 'No tracked SchedWise processes to stop.'
         return
     }
 
@@ -506,7 +506,7 @@ try {
         exit 0
     }
 
-    Write-Log 'Starting FCAMS.'
+    Write-Log 'Starting SchedWise.'
 
     Ensure-LocalConfig
     $php = Find-Php
@@ -548,8 +548,8 @@ try {
         throw 'The frontend did not become ready. See .runtime/logs/vite.err.log'
     }
 
-    Write-Log 'FCAMS is ready at http://localhost:5173'
-    if (-not $NoBrowser -and $env:FCAMS_NO_BROWSER -ne '1') {
+    Write-Log 'SchedWise is ready at http://localhost:5173'
+    if (-not $NoBrowser -and $env:SCHEDWISE_NO_BROWSER -ne '1') {
         Start-Process 'http://localhost:5173' | Out-Null
     }
     exit 0
@@ -558,12 +558,12 @@ try {
         Stop-TrackedProcesses
     }
 
-    $dependency = [string]$_.Exception.Data['FCAMS_DEPENDENCY']
+    $dependency = [string]$_.Exception.Data['SCHEDWISE_DEPENDENCY']
     if ($dependency) {
         Show-DependencyHelp `
             -Kind $dependency `
             -Message $_.Exception.Message `
-            -HelpUrl ([string]$_.Exception.Data['FCAMS_HELP_URL'])
+            -HelpUrl ([string]$_.Exception.Data['SCHEDWISE_HELP_URL'])
     } else {
         Show-Failure $_.Exception.Message
     }

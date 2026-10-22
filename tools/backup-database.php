@@ -21,7 +21,7 @@ $db = $config['db'] ?? [];
 
 function findMysqlTool(string $name): string
 {
-    $override = getenv('FCAMS_' . strtoupper($name));
+    $override = getenv('SCHEDWISE_' . strtoupper($name));
     if ($override !== false && $override !== '' && is_file($override)) {
         return $override;
     }
@@ -45,7 +45,7 @@ function findMysqlTool(string $name): string
         }
     }
 
-    throw new RuntimeException("{$name}.exe was not found. Set FCAMS_" . strtoupper($name) . '.');
+    throw new RuntimeException("{$name}.exe was not found. Set SCHEDWISE_" . strtoupper($name) . '.');
 }
 
 try {
@@ -55,7 +55,7 @@ try {
         throw new RuntimeException('Could not create .runtime/backups.');
     }
 
-    $filename = 'fcams-' . date('Ymd-His') . '.sql';
+    $filename = 'schedwise-' . date('Ymd-His') . '.sql';
     $path = $backupDir . DIRECTORY_SEPARATOR . $filename;
 
     $command = [

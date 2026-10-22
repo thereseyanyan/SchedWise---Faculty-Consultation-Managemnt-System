@@ -3,10 +3,10 @@
 declare(strict_types=1);
 
 /**
- * Restore an FCAMS SQL backup. Stop FCAMS before restoring.
+ * Restore an SchedWise SQL backup. Stop SchedWise before restoring.
  *
  * Usage:
- *   C:\xampp\php\php.exe tools/restore-database.php .runtime\backups\fcams-....sql --yes
+ *   C:\xampp\php\php.exe tools/restore-database.php .runtime\backups\schedwise-....sql --yes
  */
 
 $file = $argv[1] ?? '';
@@ -17,7 +17,7 @@ if ($file === '' || !is_file($file)) {
     exit(1);
 }
 if (!$confirmed) {
-    fwrite(STDERR, "Refusing to restore without --yes. Stop FCAMS first and retry.\n");
+    fwrite(STDERR, "Refusing to restore without --yes. Stop SchedWise first and retry.\n");
     exit(1);
 }
 
@@ -33,7 +33,7 @@ $db = $config['db'] ?? [];
 
 function findMysqlClient(): string
 {
-    $override = getenv('FCAMS_MYSQL');
+    $override = getenv('SCHEDWISE_MYSQL');
     if ($override !== false && $override !== '' && is_file($override)) {
         return $override;
     }
@@ -57,7 +57,7 @@ function findMysqlClient(): string
         }
     }
 
-    throw new RuntimeException('mysql.exe was not found. Set FCAMS_MYSQL.');
+    throw new RuntimeException('mysql.exe was not found. Set SCHEDWISE_MYSQL.');
 }
 
 try {

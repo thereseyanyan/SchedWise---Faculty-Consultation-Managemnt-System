@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * FCAMS local database bootstrap.
+ * SchedWise local database bootstrap.
  *
  * This is called automatically by the one-click launcher. It is safe to run
  * every time:
@@ -124,6 +124,16 @@ function ensureMigrations(PDO $pdo): void
     if (!$pdo->query("SHOW COLUMNS FROM users LIKE 'deleted_at'")->fetch()) {
         $pdo->exec('ALTER TABLE users ADD COLUMN deleted_at TIMESTAMP NULL');
     }
+    if (!$pdo->query("SHOW COLUMNS FROM users LIKE 'faculty_approval_status'")->fetch()) {
+        $pdo->exec(
+            "ALTER TABLE users
+             ADD COLUMN faculty_approval_status ENUM('not_required', 'pending', 'approved', 'rejected')
+             NOT NULL DEFAULT 'not_required' AFTER status"
+        );
+        // Existing faculty were created or approved before the self-registration
+        // workflow existed. Keep them usable.
+        $pdo->exec("UPDATE users SET faculty_approval_status = 'approved' WHERE role_id = 'faculty'");
+    }
     require_once __DIR__ . '/../backend/shared/validation.php';
     $accounts = $pdo->query("SELECT u.id, u.role_id, up.student_number, up.faculty_number FROM users u JOIN user_profiles up ON up.user_id = u.id WHERE u.role_id IN ('student', 'faculty') ORDER BY u.created_at, u.id")->fetchAll();
     $seen = [];
@@ -153,6 +163,9 @@ function ensureMigrations(PDO $pdo): void
             $pdo->exec("ALTER TABLE user_profiles ADD UNIQUE INDEX unique_{$field} ({$field})");
         }
     }
+    foreach (['student', 'faculty'] as $role) {
+        syncAccountIdSequence($pdo, $role);
+    }
     $column = $pdo->query("SHOW COLUMNS FROM audit_logs LIKE 'actor_user_id'")->fetch();
     if ($column !== false && strtoupper((string)$column['Null']) !== 'YES') {
         $pdo->exec('ALTER TABLE audit_logs MODIFY COLUMN actor_user_id VARCHAR(64) NULL');
@@ -161,6 +174,17 @@ function ensureMigrations(PDO $pdo): void
     $column = $pdo->query("SHOW COLUMNS FROM audit_logs LIKE 'entity_type'")->fetch();
     if ($column !== false && strtoupper((string)$column['Null']) !== 'YES') {
         $pdo->exec('ALTER TABLE audit_logs MODIFY COLUMN entity_type VARCHAR(50) NULL');
+    }
+
+    foreach ([
+        'audit_logs_created_idx' => 'created_at',
+        'audit_logs_action_idx' => 'action',
+        'audit_logs_entity_idx' => 'entity_type',
+    ] as $indexName => $columnName) {
+        $index = $pdo->query("SHOW INDEX FROM audit_logs WHERE Key_name = '{$indexName}'")->fetch();
+        if (!$index) {
+            $pdo->exec("ALTER TABLE audit_logs ADD INDEX {$indexName} ({$columnName})");
+        }
     }
 
     $column = $pdo->query("SHOW COLUMNS FROM appointments LIKE 'cancellation_reason'")->fetch();
@@ -194,7 +218,7 @@ try {
 
     if (!$hasUsers || $userCount === 0) {
         $executed = executeStatements($pdo, $statements);
-        fwrite(STDOUT, "Created FCAMS schema and demo data ({$executed} statements).\n");
+        fwrite(STDOUT, "Created SchedWise schema and demo data ({$executed} statements).\n");
     } else {
         $executed = executeStatements($pdo, $statements, true);
         fwrite(STDOUT, "Schema checked ({$executed} CREATE TABLE statements).\n");

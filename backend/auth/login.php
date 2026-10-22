@@ -37,6 +37,7 @@ $dummyHash = '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2uheWG/igi.';
 try {
     $statement = $pdo->prepare(
         'SELECT u.id, u.email, u.password_hash, u.role_id, u.status, u.email_verified_at,
+                u.faculty_approval_status,
                 up.first_name, up.last_name, up.student_number, up.faculty_number,
                 up.department_id, up.program, up.phone
          FROM users u
@@ -71,6 +72,22 @@ try {
         ], 403);
     }
 
+    if ($user['role_id'] === 'faculty' && $user['faculty_approval_status'] === 'pending') {
+        logAudit('login_pending_faculty_approval', 'user', $user['id']);
+        respond([
+            'error' => 'Your email is verified, but your faculty account is awaiting administrator approval.',
+            'code' => 'faculty_approval_pending',
+        ], 403);
+    }
+
+    if ($user['role_id'] === 'faculty' && $user['faculty_approval_status'] === 'rejected') {
+        logAudit('login_rejected_faculty', 'user', $user['id']);
+        respond([
+            'error' => 'Your faculty registration was not approved. Contact the system administrator.',
+            'code' => 'faculty_approval_rejected',
+        ], 403);
+    }
+
     // Do not reveal whether the account exists but is inactive/suspended.
     if ($user['status'] !== 'active') {
         recordRateLimitAttempt('login', $accountKey);
@@ -102,6 +119,7 @@ try {
             'email' => $user['email'],
             'role_id' => $user['role_id'],
             'status' => $user['status'],
+            'faculty_approval_status' => $user['faculty_approval_status'] ?? null,
             'first_name' => $user['first_name'] ?? null,
             'last_name' => $user['last_name'] ?? null,
             'student_number' => $user['student_number'] ?? null,

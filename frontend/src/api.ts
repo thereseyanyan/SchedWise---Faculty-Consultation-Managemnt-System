@@ -66,6 +66,8 @@ export type ManagedUser = {
   email: string;
   role_id: string;
   status: string;
+  faculty_approval_status?: string;
+  email_verified_at?: string | null;
   first_name?: string;
   last_name?: string;
   student_number?: string;
@@ -82,6 +84,7 @@ export type User = {
   email: string;
   role_id: string;
   status: string;
+  faculty_approval_status?: string | null;
   first_name?: string;
   last_name?: string;
   student_number?: string | null;
@@ -159,6 +162,34 @@ export type MonthlySeriesPoint = {
   pending: number;
 };
 
+export type AuditLogEntry = {
+  id: string;
+  actor_user_id?: string | null;
+  actor_email?: string | null;
+  actor_name?: string | null;
+  action: string;
+  entity_type?: string | null;
+  entity_id?: string | null;
+  old_values?: Record<string, unknown> | null;
+  new_values?: Record<string, unknown> | null;
+  ip_address?: string | null;
+  created_at: string;
+};
+
+export type AuditLogPage = {
+  entries: AuditLogEntry[];
+  pagination: {
+    page: number;
+    per_page: number;
+    total: number;
+    total_pages: number;
+  };
+  options: {
+    actions: string[];
+    entity_types: string[];
+  };
+};
+
 type ApiResponse<T> = {
   data?: T;
   error?: string;
@@ -213,7 +244,7 @@ async function request<T>(path: string, options?: RequestInit, csrfRetried = fal
     payload = (await response.json()) as ApiResponse<T>;
   } catch {
     throw new ApiError(response.status === 502 || response.status === 503
-      ? "The PHP backend is unavailable. Start the full app with the FCAMS launcher."
+      ? "The PHP backend is unavailable. Start the full app with the SchedWise launcher."
       : `The server returned an unreadable response (${response.status}). Check the backend logs.`, response.status);
   }
 
@@ -233,7 +264,7 @@ async function request<T>(path: string, options?: RequestInit, csrfRetried = fal
   if (!response.ok || payload.error || payload.data === undefined) {
     if (response.status === 401 && path !== "/auth/login.php") {
       csrfToken = null;
-      if (typeof window !== "undefined") window.dispatchEvent(new Event("fcams:session-expired"));
+      if (typeof window !== "undefined") window.dispatchEvent(new Event("schedwise:session-expired"));
     }
     throw new ApiError(
       payload.error || `API request failed (${response.status})`,
@@ -264,6 +295,8 @@ export const authApi = {
       user_id: string;
       verification_required?: boolean;
       student_number?: string;
+      faculty_number?: string;
+      approval_required?: boolean;
       email_sent?: boolean;
       debug_verification_url?: string;
     }>("/auth/register.php", {
@@ -400,6 +433,43 @@ export const usersApi = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+
+  approveFaculty: (id: string) =>
+    request<ManagedUser>(`/users/index.php?id=${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify({ faculty_approval_action: "approve" }),
+    }),
+
+  rejectFaculty: (id: string) =>
+    request<ManagedUser>(`/users/index.php?id=${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify({ faculty_approval_action: "reject" }),
+    }),
+};
+
+export const auditApi = {
+  list: (filters?: {
+    page?: number;
+    per_page?: number;
+    q?: string;
+    action?: string;
+    entity_type?: string;
+    actor_id?: string;
+    date_from?: string;
+    date_to?: string;
+  }) => {
+    const params = new URLSearchParams();
+    if (filters?.page) params.append("page", String(filters.page));
+    if (filters?.per_page) params.append("per_page", String(filters.per_page));
+    if (filters?.q) params.append("q", filters.q);
+    if (filters?.action) params.append("action", filters.action);
+    if (filters?.entity_type) params.append("entity_type", filters.entity_type);
+    if (filters?.actor_id) params.append("actor_id", filters.actor_id);
+    if (filters?.date_from) params.append("date_from", filters.date_from);
+    if (filters?.date_to) params.append("date_to", filters.date_to);
+    const query = params.toString() ? `?${params}` : "";
+    return request<AuditLogPage>(`/audit/index.php${query}`);
+  },
 };
 
 export const appointmentApi = {
@@ -454,6 +524,11 @@ export const appointmentApi = {
 
   complete: (id: string) =>
     request<Appointment>(`/appointments/complete.php?id=${encodeURIComponent(id)}`, {
+      method: "PUT",
+    }),
+
+  noShow: (id: string) =>
+    request<Appointment>(`/appointments/no-show.php?id=${encodeURIComponent(id)}`, {
       method: "PUT",
     }),
 
@@ -598,27 +673,43 @@ export const notificationsApi = {
 };
 
 export const reportsApi = {
-  summary: (filters?: { year?: number; month?: number }) => {
+  summary: (filters?: { year?: number; month?: number; faculty_id?: string; department_id?: string }) => {
     const params = new URLSearchParams();
     if (filters?.year !== undefined) params.append("year", filters.year.toString());
     if (filters?.month !== undefined) params.append("month", filters.month.toString());
+    if (filters?.faculty_id) params.append("faculty_id", filters.faculty_id);
+    if (filters?.department_id) params.append("department_id", filters.department_id);
 
     const query = params.toString() ? `?${params}` : "";
     return request<{
       period: { year: number; month: number; start_date: string; end_date: string };
+      filters: { faculty_id?: string | null; department_id?: string | null };
       statistics: Record<string, unknown>;
     }>(`/reports/summary.php${query}`);
   },
 
-  monthly: (months = 6) =>
-    request<{ months: number; series: MonthlySeriesPoint[] }>(
-      `/reports/monthly.php?months=${months}`,
-    ),
+  monthly: (months = 6, filters?: { end_month?: string; faculty_id?: string; department_id?: string }) => {
+    const params = new URLSearchParams({ months: String(months) });
+    if (filters?.end_month) params.append("end_month", filters.end_month);
+    if (filters?.faculty_id) params.append("faculty_id", filters.faculty_id);
+    if (filters?.department_id) params.append("department_id", filters.department_id);
+    return request<{ months: number; end_month: string; series: MonthlySeriesPoint[] }>(
+      `/reports/monthly.php?${params}`,
+    );
+  },
 
-  exportUrl: (filters?: { year?: number; month?: number; format?: "json" | "csv" }) => {
+  exportUrl: (filters?: {
+    year?: number;
+    month?: number;
+    faculty_id?: string;
+    department_id?: string;
+    format?: "json" | "csv";
+  }) => {
     const params = new URLSearchParams();
     if (filters?.year !== undefined) params.append("year", filters.year.toString());
     if (filters?.month !== undefined) params.append("month", filters.month.toString());
+    if (filters?.faculty_id) params.append("faculty_id", filters.faculty_id);
+    if (filters?.department_id) params.append("department_id", filters.department_id);
     params.append("format", filters?.format ?? "csv");
     return `${API_BASE_URL}/reports/export.php?${params}`;
   },

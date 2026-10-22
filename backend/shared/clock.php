@@ -5,10 +5,9 @@ declare(strict_types=1);
 /**
  * Current date according to the database server.
  *
- * PHP and MySQL may be configured with different timezones (this project has
- * been run with PHP in Europe/Berlin and MySQL in Malay Peninsula time), so
- * date-based rules must use one clock consistently. The database is the source
- * of truth for appointment dates.
+ * PHP and MySQL must use the same timezone for date-based rules. The database
+ * remains the source of truth for appointment dates and times, and bootstrap
+ * aligns PHP's default timezone with the configured application timezone.
  */
 function dbNowDate(): string
 {

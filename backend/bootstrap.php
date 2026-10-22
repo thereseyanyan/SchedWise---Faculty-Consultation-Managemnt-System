@@ -21,11 +21,22 @@ if (!is_file($configPath)) {
 $config = require $configPath;
 $appConfig = $config['app'] ?? [];
 
+// Keep PHP date formatting aligned with the database server. Business rules
+// still use the database clock, but this prevents displayed dates from
+// shifting when PHP defaults to a different timezone than MySQL.
+$timezone = (string)($appConfig['timezone'] ?? (getenv('SCHEDWISE_TIMEZONE') ?: 'Asia/Kuala_Lumpur'));
+if (!in_array($timezone, timezone_identifiers_list(), true)) {
+    error_log('Invalid SchedWise timezone "' . $timezone . '"; falling back to Asia/Kuala_Lumpur.');
+    $timezone = 'Asia/Kuala_Lumpur';
+}
+date_default_timezone_set($timezone);
+
 // ---------------------------------------------------------------------------
 // Shared functions.
 // ---------------------------------------------------------------------------
 require_once __DIR__ . '/shared/auth.php';
 require_once __DIR__ . '/shared/authorization.php';
+require_once __DIR__ . '/shared/report_filters.php';
 require_once __DIR__ . '/shared/validation.php';
 require_once __DIR__ . '/shared/clock.php';
 require_once __DIR__ . '/shared/rate_limit.php';

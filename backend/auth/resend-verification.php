@@ -33,7 +33,7 @@ global $pdo;
 
 try {
     $statement = $pdo->prepare(
-        'SELECT id, email, status, email_verified_at
+        'SELECT id, email, role_id, status, email_verified_at
          FROM users
          WHERE LOWER(email) = :email
          LIMIT 1'
@@ -54,7 +54,8 @@ try {
     try {
         sendEmailVerificationLink(
             (string)$account['email'],
-            emailVerificationUrl($token)
+            emailVerificationUrl($token),
+            (string)$account['role_id']
         );
         $mailSent = true;
     } catch (Throwable $mailException) {

@@ -22,7 +22,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         }
 
         $statement = $pdo->prepare(
-            'SELECT u.id, u.email, u.role_id, u.status, u.last_login_at, u.created_at,
+            'SELECT u.id, u.email, u.role_id, u.status, u.email_verified_at,
+                    u.faculty_approval_status, u.last_login_at, u.created_at,
                     up.first_name, up.last_name, up.student_number, up.faculty_number,
                     up.department_id, up.program, up.phone
              FROM users u
@@ -75,7 +76,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $whereClause = $where === [] ? '' : 'WHERE ' . implode(' AND ', $where);
 
     $statement = $pdo->prepare(
-        "SELECT u.id, u.email, u.role_id, u.status, u.last_login_at, u.created_at,
+        "SELECT u.id, u.email, u.role_id, u.status, u.email_verified_at,
+                u.faculty_approval_status, u.last_login_at, u.created_at,
                 up.first_name, up.last_name, up.student_number, up.faculty_number,
                 up.department_id, up.program, up.phone
          FROM users u
@@ -115,6 +117,105 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
     if (!$isAdmin && !$isSelf) {
         respond(['error' => 'Insufficient permissions'], 403);
     }
+
+    // Faculty self-registrations are approved or rejected here. This is kept
+    // separate from the generic status dropdown so a pending faculty account
+    // cannot accidentally be activated before email verification.
+    if (isset($input['faculty_approval_action'])) {
+        if (!$isAdmin) {
+            respond(['error' => 'Insufficient permissions'], 403);
+        }
+        if ($target['role_id'] !== 'faculty') {
+            respond(['error' => 'Only faculty accounts use the approval workflow.'], 400);
+        }
+
+        $approvalAction = strtolower(trim((string)$input['faculty_approval_action']));
+        if (!in_array($approvalAction, ['approve', 'reject'], true)) {
+            respond(['error' => 'Invalid faculty approval action.'], 400);
+        }
+        if ($target['faculty_approval_status'] !== 'pending') {
+            respond(['error' => 'This faculty account is no longer awaiting approval.'], 409);
+        }
+        if ($approvalAction === 'approve' && $target['email_verified_at'] === null) {
+            respond([
+                'error' => 'The faculty member must verify their email before approval.',
+                'code' => 'faculty_email_unverified',
+            ], 400);
+        }
+
+        $newStatus = $approvalAction === 'approve' ? 'active' : 'disabled';
+        $newApprovalStatus = $approvalAction === 'approve' ? 'approved' : 'rejected';
+
+        try {
+            $pdo->beginTransaction();
+            $statement = $pdo->prepare(
+                "UPDATE users
+                 SET status = :status, faculty_approval_status = :approval_status, updated_at = NOW()
+                 WHERE id = :id
+                   AND role_id = 'faculty'
+                   AND faculty_approval_status = 'pending'
+                   AND deleted_at IS NULL"
+            );
+            $statement->execute([
+                ':status' => $newStatus,
+                ':approval_status' => $newApprovalStatus,
+                ':id' => $id,
+            ]);
+            if ($statement->rowCount() !== 1) {
+                $pdo->rollBack();
+                respond(['error' => 'This faculty account is no longer awaiting approval.'], 409);
+            }
+            $pdo->commit();
+
+            logAudit(
+                $approvalAction === 'approve' ? 'approve_faculty' : 'reject_faculty',
+                'user',
+                $id,
+                ['status' => $target['status'], 'faculty_approval_status' => $target['faculty_approval_status']],
+                ['status' => $newStatus, 'faculty_approval_status' => $newApprovalStatus]
+            );
+
+            try {
+                sendFacultyApprovalDecision(
+                    (string)$target['email'],
+                    trim((string)$target['first_name'] . ' ' . (string)$target['last_name']),
+                    $approvalAction === 'approve'
+                );
+                createNotification(
+                    $id,
+                    'account',
+                    $approvalAction === 'approve' ? 'Faculty account approved' : 'Faculty registration not approved',
+                    $approvalAction === 'approve'
+                        ? 'An administrator approved your faculty account. You can now sign in.'
+                        : 'An administrator did not approve your faculty registration. Contact the system administrator for details.'
+                );
+            } catch (Throwable $notificationException) {
+                error_log(sprintf(
+                    'Faculty approval notification failed for user %s: %s',
+                    $id,
+                    $notificationException->getMessage()
+                ));
+            }
+        } catch (Throwable $exception) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            respondServerError($exception, 'Failed to update faculty approval.');
+        }
+
+        $statement = $pdo->prepare(
+            'SELECT u.id, u.email, u.role_id, u.status, u.email_verified_at,
+                    u.faculty_approval_status, u.last_login_at, u.created_at,
+                    up.first_name, up.last_name, up.student_number, up.faculty_number,
+                    up.department_id, up.program, up.phone
+             FROM users u
+             LEFT JOIN user_profiles up ON u.id = up.user_id
+             WHERE u.id = :id'
+        );
+        $statement->execute([':id' => $id]);
+        respond($statement->fetch());
+    }
+
     if (isset($input['role_id']) && $input['role_id'] !== $target['role_id']) {
         respond(['error' => 'Account roles are permanent and cannot be changed.', 'fields' => ['role_id' => 'Account roles are permanent.']], 400);
     }
@@ -145,6 +246,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
 
             if ($isSelf && in_array($newStatus, ['pending', 'suspended', 'disabled'], true)) {
                 respond(['error' => 'You cannot suspend, disable, or deactivate your own account'], 400);
+            }
+
+            // Pending/rejected faculty must use the explicit approval action.
+            if ($target['role_id'] === 'faculty'
+                && in_array($target['faculty_approval_status'], ['pending', 'rejected'], true)
+            ) {
+                respond(['error' => 'Use the faculty approval action for this account.'], 409);
             }
 
             $statement = $pdo->prepare(
@@ -212,7 +320,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
         logAudit('update', 'user', $id, $old, $input);
 
         $statement = $pdo->prepare(
-            'SELECT u.id, u.email, u.role_id, u.status, u.last_login_at, u.created_at,
+            'SELECT u.id, u.email, u.role_id, u.status, u.email_verified_at,
+                    u.faculty_approval_status, u.last_login_at, u.created_at,
                     up.first_name, up.last_name, up.student_number, up.faculty_number,
                     up.department_id, up.program, up.phone
              FROM users u
@@ -281,8 +390,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $userId = bin2hex(random_bytes(16));
 
         $statement = $pdo->prepare(
-            'INSERT INTO users (id, email, password_hash, role_id, status, email_verified_at)
-             VALUES (:id, :email, :password_hash, :role_id, :status, NOW())'
+            'INSERT INTO users (id, email, password_hash, role_id, status, faculty_approval_status, email_verified_at)
+             VALUES (:id, :email, :password_hash, :role_id, :status, :faculty_approval_status, NOW())'
         );
         $statement->execute([
             ':id' => $userId,
@@ -290,6 +399,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ':password_hash' => hashPassword($password),
             ':role_id' => $roleId,
             ':status' => $status,
+            ':faculty_approval_status' => $roleId === 'faculty' ? 'approved' : 'not_required',
         ]);
 
         $statement = $pdo->prepare(

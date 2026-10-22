@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Reset FCAMS to the clean demo baseline.
+ * Reset SchedWise to the clean demo baseline.
  *
  * This is destructive: it removes all users, appointments, consultations,
  * notifications, availability, reset codes, audit history, and rate limits,
@@ -16,7 +16,7 @@ declare(strict_types=1);
 if (!in_array('--yes', $argv, true)) {
     fwrite(
         STDERR,
-        "Refusing to reset. This deletes all local FCAMS data.\n"
+        "Refusing to reset. This deletes all local SchedWise data.\n"
         . "Run again with --yes to continue.\n"
     );
     exit(1);
@@ -110,9 +110,9 @@ try {
 
     fwrite(
         STDOUT,
-        "FCAMS demo reset complete.\n"
+        "SchedWise demo reset complete.\n"
         . "Users: {$userCount}, departments: {$departmentCount}, availability rows: {$availabilityCount}.\n"
-        . "Demo accounts: admin@fcams.edu, elena.cruz@fcams.edu, juan.delacruz@fcams.edu.\n"
+        . "Demo accounts: admin@schedwise.edu, elena.cruz@schedwise.edu, juan.delacruz@schedwise.edu.\n"
     );
 } catch (Throwable $exception) {
     if (isset($pdo) && $pdo->inTransaction()) {

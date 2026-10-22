@@ -1,8 +1,8 @@
-CREATE DATABASE IF NOT EXISTS fcams
+CREATE DATABASE IF NOT EXISTS schedwise
   CHARACTER SET utf8mb4
   COLLATE utf8mb4_unicode_ci;
 
-USE fcams;
+USE schedwise;
 
 -- Roles table
 CREATE TABLE IF NOT EXISTS roles (
@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash VARCHAR(255) NOT NULL,
   role_id VARCHAR(32) NOT NULL,
   status ENUM('pending', 'active', 'suspended', 'disabled') NOT NULL DEFAULT 'pending',
+  faculty_approval_status ENUM('not_required', 'pending', 'approved', 'rejected') NOT NULL DEFAULT 'not_required',
   email_verified_at TIMESTAMP NULL,
   last_login_at TIMESTAMP NULL,
   deleted_at TIMESTAMP NULL,
@@ -165,7 +166,10 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   new_values JSON NULL,
   ip_address VARCHAR(45) NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (actor_user_id) REFERENCES users(id) ON DELETE RESTRICT
+  FOREIGN KEY (actor_user_id) REFERENCES users(id) ON DELETE RESTRICT,
+  INDEX audit_logs_created_idx (created_at),
+  INDEX audit_logs_action_idx (action),
+  INDEX audit_logs_entity_idx (entity_type)
 ) ENGINE=InnoDB;
 
 -- Password reset tokens
@@ -218,14 +222,14 @@ INSERT IGNORE INTO departments (id, name, college, status) VALUES
   ('cas', 'College of Arts & Sciences', 'College of Arts & Sciences', 'active');
 
 -- Demo accounts. Change these passwords if the project is shared or exposed.
--- admin@fcams.edu    / Admin123!
--- elena.cruz@fcams.edu / Passw0rd!
--- juan.delacruz@fcams.edu / Passw0rd!
+-- admin@schedwise.edu    / Admin123!
+-- elena.cruz@schedwise.edu / Passw0rd!
+-- juan.delacruz@schedwise.edu / Passw0rd!
 INSERT IGNORE INTO users (id, email, password_hash, role_id, status, email_verified_at, last_login_at)
 VALUES
-  ('admin001', 'admin@fcams.edu', '$2y$10$97dWxXXw/l4qnZ2LyJh3ouQ3yrNLs8NRZxGoAht1rcjpelRN4lyDO', 'admin', 'active', NOW(), NULL),
-  ('faculty001', 'elena.cruz@fcams.edu', '$2y$10$e4h3Ff61UrW8zkLjI3Kb1eXyTPGfHeAezWojmMvBhBW2Zv4iRkoHa', 'faculty', 'active', NOW(), NULL),
-  ('student001', 'juan.delacruz@fcams.edu', '$2y$10$fJDbpfTB.4PNuAaSm8iEZO2DSoug42bJwPsDHrMLgq5dZo2cPWOiS', 'student', 'active', NOW(), NULL);
+  ('admin001', 'admin@schedwise.edu', '$2y$10$97dWxXXw/l4qnZ2LyJh3ouQ3yrNLs8NRZxGoAht1rcjpelRN4lyDO', 'admin', 'active', NOW(), NULL),
+  ('faculty001', 'elena.cruz@schedwise.edu', '$2y$10$e4h3Ff61UrW8zkLjI3Kb1eXyTPGfHeAezWojmMvBhBW2Zv4iRkoHa', 'faculty', 'active', NOW(), NULL),
+  ('student001', 'juan.delacruz@schedwise.edu', '$2y$10$fJDbpfTB.4PNuAaSm8iEZO2DSoug42bJwPsDHrMLgq5dZo2cPWOiS', 'student', 'active', NOW(), NULL);
 
 INSERT IGNORE INTO user_profiles
   (user_id, first_name, last_name, student_number, faculty_number, department_id, program, phone)

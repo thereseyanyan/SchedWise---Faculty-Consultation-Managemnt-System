@@ -20,6 +20,14 @@ function allocateAccountNumber(PDO $pdo, string $role, ?string $requested = null
     if ($requested !== '') {
         $exists->execute([$requested]);
         if ($exists->fetchColumn()) respond(['error' => 'ID already registered', 'fields' => [$field => 'This ID is already registered.']], 409);
+
+        // Keep later automatic IDs above any manually supplied ID. This avoids
+        // reusing a lower number and keeps the sequence monotonic.
+        $requestedNumber = (int)substr($requested, strlen($prefix));
+        $pdo->prepare(
+            'UPDATE account_id_sequences SET next_number = GREATEST(next_number, ?) WHERE role_id = ?'
+        )->execute([$requestedNumber, $role]);
+
         return $requested;
     }
     do {
@@ -28,6 +36,31 @@ function allocateAccountNumber(PDO $pdo, string $role, ?string $requested = null
     } while ($exists->fetchColumn());
     $pdo->prepare('UPDATE account_id_sequences SET next_number = ? WHERE role_id = ?')->execute([$number, $role]);
     return $candidate;
+}
+
+/**
+ * Move an account-ID sequence forward to the highest ID already stored. This
+ * keeps automatic IDs monotonic after importing data or repairing legacy rows.
+ */
+function syncAccountIdSequence(PDO $pdo, string $role): void
+{
+    if (!in_array($role, ['student', 'faculty'], true)) return;
+
+    $field = $role === 'student' ? 'student_number' : 'faculty_number';
+    $prefix = $role === 'student' ? 'STU-' : 'FAC-';
+    $statement = $pdo->query("SELECT {$field} FROM user_profiles WHERE {$field} IS NOT NULL");
+    $highest = 0;
+    foreach ($statement->fetchAll(PDO::FETCH_COLUMN) as $value) {
+        $value = strtoupper(trim((string)$value));
+        if (preg_match('/^' . $prefix . '(\d{4,})$/', $value, $matches)) {
+            $highest = max($highest, (int)$matches[1]);
+        }
+    }
+
+    $pdo->prepare(
+        'INSERT INTO account_id_sequences (role_id, next_number) VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE next_number = GREATEST(next_number, ?)'
+    )->execute([$role, $highest, $highest]);
 }
 
 /**
@@ -40,7 +73,7 @@ function validateEmail(string $email, bool $requireInstitutional = false): bool
     }
 
     if ($requireInstitutional) {
-        // Require an academic TLD segment (e.g. name@fcams.edu, name@x.ac.uk,
+        // Require an academic TLD segment (e.g. name@schedwise.edu, name@x.ac.uk,
         // name@student.college.edu) - customize as needed
         $institutionalPattern = '/@([a-z0-9-]+\.)+(edu|ac|sch|school|college|university)(\.[a-z]{2,})?$/i';
         return (bool) preg_match($institutionalPattern, $email);

@@ -46,10 +46,9 @@ $endDate = date('Y-m-t', strtotime($startDate));
 $where = ['a.appointment_date BETWEEN :start_date AND :end_date'];
 $params = [':start_date' => $startDate, ':end_date' => $endDate];
 
-if ($user['role_id'] === 'faculty') {
-    $where[] = 'a.faculty_id = :faculty_id';
-    $params[':faculty_id'] = $user['id'];
-}
+[$scopeConditions, $scopeParams] = reportScopeFilters($pdo, $user, $_GET);
+$where = array_merge($where, $scopeConditions);
+$params = array_merge($params, $scopeParams);
 
 $whereClause = 'WHERE ' . implode(' AND ', $where);
 
@@ -74,7 +73,7 @@ try {
 
     if ($format === 'csv') {
         header('Content-Type: text/csv; charset=utf-8');
-        header('Content-Disposition: attachment; filename="fcams-appointments-' . $year . '-' . sprintf('%02d', $month) . '.csv"');
+        header('Content-Disposition: attachment; filename="schedwise-appointments-' . $year . '-' . sprintf('%02d', $month) . '.csv"');
 
         $out = fopen('php://output', 'w');
         fputcsv($out, [
@@ -103,6 +102,10 @@ try {
 
     respond([
         'period' => ['year' => $year, 'month' => $month, 'start_date' => $startDate, 'end_date' => $endDate],
+        'filters' => [
+            'faculty_id' => $params[':report_faculty_id'] ?? null,
+            'department_id' => $params[':report_department_id'] ?? null,
+        ],
         'rows' => $rows,
         'count' => count($rows),
     ]);

@@ -18,7 +18,7 @@ function startSecureSession(): void
     ini_set('session.use_only_cookies', '1');
     ini_set('session.gc_maxlifetime', '43200');
 
-    session_name('FCAMSSESSID');
+    session_name('SCHEDWISESESSID');
     session_set_cookie_params([
         'lifetime' => 0,
         'path' => '/',
@@ -31,7 +31,7 @@ function startSecureSession(): void
     if (!session_start()) {
         http_response_code(503);
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(['error' => 'Sign-in is temporarily unavailable because session storage could not be opened. Restart FCAMS or contact the administrator.']);
+        echo json_encode(['error' => 'Sign-in is temporarily unavailable because session storage could not be opened. Restart SchedWise or contact the administrator.']);
         exit;
     }
 
@@ -91,7 +91,8 @@ function authenticateUser(): array
 
     global $pdo;
     $statement = $pdo->prepare(
-        'SELECT u.id, u.email, u.role_id, u.status, u.password_hash, up.first_name, up.last_name,
+        'SELECT u.id, u.email, u.role_id, u.status, u.faculty_approval_status, u.password_hash,
+                up.first_name, up.last_name,
                 up.student_number, up.faculty_number, up.department_id, up.program, up.phone
          FROM users u
          LEFT JOIN user_profiles up ON u.id = up.user_id
@@ -100,7 +101,11 @@ function authenticateUser(): array
     $statement->execute([':id' => $_SESSION['user_id']]);
     $user = $statement->fetch();
 
-    if (!$user || $user['status'] !== 'active') {
+    $pendingFaculty = $user
+        && ($user['role_id'] ?? null) === 'faculty'
+        && in_array($user['faculty_approval_status'] ?? '', ['pending', 'rejected'], true);
+
+    if (!$user || $user['status'] !== 'active' || $pendingFaculty) {
         destroySession();
         respond(['error' => 'Invalid session'], 401);
     }
@@ -261,7 +266,7 @@ function fetchAppointmentById(string $id): ?array
 {
     global $pdo;
     $statement = $pdo->prepare(
-        'SELECT a.*,
+        'SELECT a.*, cr.summary,
                 uf.first_name AS faculty_first_name, uf.last_name AS faculty_last_name,
                 uf.faculty_number AS faculty_number,
                 us.first_name AS student_first_name, us.last_name AS student_last_name,
@@ -269,6 +274,7 @@ function fetchAppointmentById(string $id): ?array
          FROM appointments a
          LEFT JOIN user_profiles uf ON a.faculty_id = uf.user_id
          LEFT JOIN user_profiles us ON a.student_id = us.user_id
+         LEFT JOIN consultation_records cr ON cr.appointment_id = a.id
          WHERE a.id = :id'
     );
     $statement->execute([':id' => $id]);

@@ -17,38 +17,45 @@ $user = authenticateUser();
 global $pdo;
 
 $months = isset($_GET['months']) ? max(1, min(24, (int)$_GET['months'])) : 6;
+$endMonth = trim((string)($_GET['end_month'] ?? ''));
 
-// Anchor the series to the database month to keep the report aligned with
-// stored appointment dates even when PHP and MySQL use different timezones.
-$monthStart = (string)$pdo->query("SELECT DATE_FORMAT(CURDATE(), '%Y-%m-01')")->fetchColumn();
+if ($endMonth !== '') {
+    if (!preg_match('/^\d{4}-\d{2}$/', $endMonth)) {
+        respond(['error' => 'End month must use YYYY-MM format'], 400);
+    }
+    [$endYear, $endMonthNumber] = array_map('intval', explode('-', $endMonth));
+    if ($endYear < 2000 || $endYear > 2100 || $endMonthNumber < 1 || $endMonthNumber > 12) {
+        respond(['error' => 'Invalid end month'], 400);
+    }
+    $monthStart = sprintf('%04d-%02d-01', $endYear, $endMonthNumber);
+} else {
+    // Anchor the series to the database month to keep the report aligned with
+    // stored appointment dates even when PHP and MySQL use different timezones.
+    $monthStart = (string)$pdo->query("SELECT DATE_FORMAT(CURDATE(), '%Y-%m-01')")->fetchColumn();
+}
+
 $end = new DateTimeImmutable($monthStart);
 $start = $end->modify('-' . ($months - 1) . ' months');
 
-$roleFilter = '';
 $params = [
     ':start_date' => $start->format('Y-m-d'),
     ':end_date' => $end->modify('last day of this month')->format('Y-m-d'),
 ];
-
-if ($user['role_id'] === 'student') {
-    $roleFilter = 'AND student_id = :uid';
-    $params[':uid'] = $user['id'];
-} elseif ($user['role_id'] === 'faculty') {
-    $roleFilter = 'AND faculty_id = :uid';
-    $params[':uid'] = $user['id'];
-}
+[$scopeConditions, $scopeParams] = reportScopeFilters($pdo, $user, $_GET);
+$whereConditions = array_merge(['a.appointment_date BETWEEN :start_date AND :end_date'], $scopeConditions);
+$whereClause = 'WHERE ' . implode(' AND ', $whereConditions);
+$params = array_merge($params, $scopeParams);
 
 try {
     $statement = $pdo->prepare(
-        "SELECT DATE_FORMAT(appointment_date, '%Y-%m') AS period,
+        "SELECT DATE_FORMAT(a.appointment_date, '%Y-%m') AS period,
                 COUNT(*) AS total,
-                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed,
-                SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled,
-                SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending
-         FROM appointments
-         WHERE appointment_date BETWEEN :start_date AND :end_date
-         {$roleFilter}
-         GROUP BY DATE_FORMAT(appointment_date, '%Y-%m')
+                SUM(CASE WHEN a.status = 'completed' THEN 1 ELSE 0 END) AS completed,
+                SUM(CASE WHEN a.status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled,
+                SUM(CASE WHEN a.status = 'pending' THEN 1 ELSE 0 END) AS pending
+         FROM appointments a
+         {$whereClause}
+         GROUP BY DATE_FORMAT(a.appointment_date, '%Y-%m')
          ORDER BY period ASC"
     );
     $statement->execute($params);
@@ -84,6 +91,11 @@ try {
 
     respond([
         'months' => $months,
+        'end_month' => $end->format('Y-m'),
+        'filters' => [
+            'faculty_id' => $params[':report_faculty_id'] ?? null,
+            'department_id' => $params[':report_department_id'] ?? null,
+        ],
         'series' => $series,
     ]);
 } catch (Throwable $exception) {

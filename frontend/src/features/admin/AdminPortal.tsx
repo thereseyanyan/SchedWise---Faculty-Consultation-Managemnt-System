@@ -33,13 +33,13 @@ export function AdminPortal({
   const [counts, setCounts] = useState<{
     users: number
     faculty: number
-    pendingFaculty: number
+    pendingStudents: number
     appointments: number
     completion: number
   } | null>(null)
   const name = fullName(currentUser?.first_name, currentUser?.last_name, currentUser?.email ?? "Administrator")
   const nav = [
-    { label: "User Management", icon: UserCog, badge: counts?.pendingFaculty ?? 0 },
+    { label: "User Management", icon: UserCog, badge: counts?.pendingStudents ?? 0 },
     { label: "System Analytics", icon: BarChart3 },
     { label: "Audit Log", icon: ShieldCheck },
   ]
@@ -53,7 +53,7 @@ export function AdminPortal({
         setCounts({
           users: all.length,
           faculty: faculty.length,
-          pendingFaculty: faculty.filter((user) => user.faculty_approval_status === "pending").length,
+          pendingStudents: all.filter((user) => user.role_id === "student" && user.student_approval_status === "pending").length,
           appointments: appointments.length,
           completion: appointments.length ? Math.round(100 * appointments.filter((a) => a.status === "completed").length / appointments.length) : 0,
         })
@@ -70,8 +70,8 @@ export function AdminPortal({
     <PortalShell
       role="Admin"
       stats={[
-        { label: "Total Users", value: counts ? String(counts.users) : "—", hint: "Registered accounts", icon: UsersRound, onClick: () => setDrilldown("Total Users") },
-        { label: "Faculty", value: counts ? String(counts.faculty) : "—", hint: counts?.pendingFaculty ? `${counts.pendingFaculty} awaiting approval` : "Faculty accounts", icon: GraduationCap, onClick: () => setDrilldown("Faculty"), attention: Boolean(counts?.pendingFaculty) },
+        { label: "Total Users", attention: Boolean(counts?.pendingStudents), value: counts ? String(counts.users) : "—", hint: counts?.pendingStudents ? `${counts.pendingStudents} student applications pending` : "Registered accounts", icon: UsersRound, onClick: () => setDrilldown("Total Users") },
+        { label: "Faculty", value: counts ? String(counts.faculty) : "—", hint: "Faculty accounts", icon: GraduationCap, onClick: () => setDrilldown("Faculty") },
         { label: "Appointments", value: counts ? String(counts.appointments) : "—", hint: "All appointments", icon: CalendarDays, onClick: () => setDrilldown("Appointments") },
         { label: "Completion Rate", value: counts ? `${counts.completion}%` : "—", hint: "Completed / all appointments", icon: BarChart3, onClick: () => setDrilldown("Completion Rate") },
       ]}

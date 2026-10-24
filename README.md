@@ -1,6 +1,6 @@
 # SchedWise — Faculty Consultation and Appointment Management System
 
-> **Current email setup:** Local Mailpit testing is restored. The launcher starts Mailpit automatically; inbox links remain hidden in the app. No real email provider or paid subscription is needed.
+> **Current email setup:** Outgoing messages use the SMTP sender configured in ignored `backend/config.php` or `SCHEDWISE_MAIL_*` variables. The launcher no longer starts Mailpit automatically. Local configuration currently uses Gmail SMTP; keep sender credentials private.
 
 
 The document reserves a stable vertical scrollbar gutter so centered headers, dashboard cards, and content do not shift horizontally between short and long pages. Older browsers use an always-reserved vertical scrollbar as a fallback.
@@ -10,6 +10,63 @@ SchedWise is a local-first academic consultation platform for students, faculty,
 > **Project mode:** local development/demo. The app is intentionally not deployed, but it is built with production-grade authorization, session handling, CSRF protection, validation, and error handling. Keep the same standard when extending it.
 
 ---
+
+## Current registration and account workflow (2026-10-24)
+
+This section supersedes the earlier email-only login, generated Student IDs, institutional email restrictions, and public faculty registration descriptions below.
+
+### Added requirements: User Registration & Admin Workflow
+
+The revised requirements are implemented as follows:
+
+| Area | Updated requirement |
+| --- | --- |
+| Public student registration | Students register themselves using their Student ID, personal email, and password through the Student Registration form. |
+| Student account creation by admins | Removed. Admins review student applications instead of manually registering students. |
+| Student approval | New applications remain **Pending** until an admin selects **Approve** or **Reject** from User Management on the admin dashboard. |
+| Student authentication | Students log in using their **Student ID or registered email and password**. |
+| Public faculty registration | Removed and blocked by the backend. |
+| Faculty account creation | Only an admin can create faculty accounts and provide an initial password. |
+| First faculty login | Faculty must change the initial password before accessing the system. |
+
+The database adjustments, backend API behavior, and frontend workflow details are documented below.
+
+- **Students:** choose Student on the welcome page and submit Student Registration. Students supply their own permanent unique Student ID and personal email (Gmail, Yahoo, Outlook, or another valid domain). IDs accept 1–100 letters, digits, dots, underscores, or hyphens, are normalized to uppercase, and preserve leading zeroes. Existing `STU-` IDs remain valid. Applications have `status = pending` and `student_approval_status = pending`. Students sign in with **Student ID or registered email and password**, after administrator approval; email is also used for contact and password recovery. Email verification is not an additional approval prerequisite.
+- **Administrators:** User Management lists pending student applications with **Approve** and **Reject** actions. Approval sets `status = active` and approval status `approved`; rejection sets `status = disabled` and approval status `rejected`. Decisions are audited and send email/in-app notifications. Generic status updates cannot activate pending or rejected applications. Administrators cannot create student accounts.
+- **Faculty:** public registration is blocked in the UI and API. Administrators use **Create Faculty Account** to supply the faculty member's email and initial password. Faculty sign in with that email and password. The first session shows a required password-change form; refreshing keeps that form visible. Only self-session inspection, password change, and logout are permitted until the password changes. The new password must satisfy the password policy and differ from the initial password.
+
+### Personal email validation and automated approval notifications
+
+- Immediately after a successful student signup, the system emails the student's own registered address to confirm receipt and explain that administrator approval is pending. This is a registration acknowledgement, not an email-verification link. The account remains pending. The API returns `email_sent`; the signup screen reports delivery failures without losing the saved application.
+- Registration uses general email syntax validation in the frontend and PHP `FILTER_VALIDATE_EMAIL` in the backend. There is no custom or institutional domain allowlist. Gmail, Yahoo, Outlook, and institutional addresses are accepted; malformed addresses are rejected.
+- Approving a student activates the account and automatically sends a welcome email stating that the account is activated and ready for login. Rejection emails are also sent. Email delivery uses the existing PHPMailer SMTP integration in `backend/shared/mailer.php`, called from the administrator approval endpoint.
+- The in-app notification is saved in the same transaction as the decision. SMTP delivery runs after commit; a delivery failure does not undo account activation. The response includes `notification_email_sent`, and the admin panel warns when email sending fails. Repeated approval requests return 409 to prevent duplicate decisions/emails.
+- **Local delivery:** Mailpit captures outgoing messages at `http://localhost:8025`; personal email addresses are accepted, but messages are not delivered to external Gmail/Yahoo/Outlook inboxes while using Mailpit.
+- **External delivery:** configure `SCHEDWISE_MAIL_HOST`, `SCHEDWISE_MAIL_PORT`, `SCHEDWISE_MAIL_USERNAME`, `SCHEDWISE_MAIL_PASSWORD`, `SCHEDWISE_MAIL_ENCRYPTION` (`tls`/`ssl`), and an authorized `SCHEDWISE_MAIL_FROM` sender. Set `SCHEDWISE_FRONTEND_URL` to the address recipients can open, then restart the backend. Keep credentials in environment variables or ignored local configuration.
+
+### Database and migration
+
+Fresh installs use `database.sql`. Existing installs run `C:\xampp\php\php.exe tools\setup-database.php` (also run by the launcher). The migration is repeatable and preserves existing accounts, passwords, and consultation history.
+
+| Field on `users` | Type/default | Purpose |
+| --- | --- | --- |
+| `student_approval_status` | `ENUM('not_required','pending','approved','rejected')`, default `not_required` | New student applications start pending. Existing pending students need approval; existing active students retain access. |
+| `must_change_password` | `TINYINT(1)`, default `0` | Admin-created faculty are inserted with `1`; only successful authenticated password change clears it. Existing accounts are preserved. |
+
+No additional database columns are needed for personal emails or supplied Student IDs: `users.email` and `user_profiles.student_number` already have unique indexes. The existing unique `user_profiles.student_number` index enforces Student ID uniqueness. The setup migration preserves valid supplied IDs, including leading zeroes, across restarts. The legacy `faculty_approval_status` column remains for compatibility with existing data; no new public faculty registrations are accepted. Previously pending/rejected faculty remain blocked and require administrator attention.
+
+Validation: PHP syntax checks, TypeScript checking, production build, 17/17 API regressions, 4/4 client CSRF tests, and the Playwright browser smoke test pass. The browser suite covers student application/approval, admin faculty creation, forced password change across reloads, and existing booking/report flows. The launcher readiness check now matches the current SchedWise page title.
+
+### API contract
+
+- **Bug fixes (2026-10-24):** direct API/browser test runs now check the local SMTP fixture before any requests or cleanup and refuse real Gmail SMTP. Registration rejects whitespace-only names and non-text JSON fields with field errors. Registration, approval/rejection, and admin account mutations now write their audit entries before committing, so audit failures roll back the account changes rather than reporting an error after saving them. Email sending remains after commit.
+- **Offline regression checks (safe with real SMTP configured):** run `C:\xampp\php\php.exe tests\registration-validation.test.php` and `node --test tests/audit-transaction.test.mjs tests/csrf-client.test.mjs`. These check input validation, injected audit failures, rollback/no-email behavior, and client CSRF handling without database or SMTP connections. Full API/browser tests intentionally refuse the current real SMTP configuration; run them only with an isolated local mail fixture.
+
+- `POST /auth/register.php`: requires `student_number`, a standard email address, password, first/last names, and `role_id: "student"`; duplicate Student IDs or emails return 409 with field errors; returns `student_number`, `approval_required: true`, and `verification_required: false`.
+- `POST /auth/login.php`: accepts `{ identifier, password }`; students provide their Student ID or registered email; faculty/admin provide email. The legacy `email` input key remains accepted as an identifier key, including registered student email.
+- `PUT /users/index.php?id=...`: admin decisions use `{ student_approval_action: "approve" | "reject" }`; repeat/stale decisions return 409.
+- `POST /users/index.php`: admin-only faculty creation, always sets `must_change_password = 1`.
+- `GET /auth/me.php` and login responses include `must_change_password`; `POST /auth/change-password.php` validates the current/new passwords, clears the flag, and rotates CSRF. Other protected APIs reject restricted sessions with `password_change_required`.
 
 ## Change Summary (2026-10-24)
 
@@ -111,7 +168,7 @@ SchedWise provides:
 - CSRF token enforcement on state-changing requests
 - Login, registration, email-verification/resend, forgot-password, and reset-password throttling
 - Password reset codes hashed, expiring, single-use, and all outstanding codes invalidated after reset
-- Verified self-registration for students and faculty: new accounts stay `pending` until they open a hashed, 24-hour, single-use email link. Faculty accounts then remain pending administrator approval (`faculty_approval_status = pending`), which is performed from User Management and sends a decision email. Demo accounts remain active and administrator-created accounts default to active with `email_verified_at` set
+- Student self-registration accepts supplied IDs and personal email; admin approval activates accounts and sends a welcome email. Faculty accounts are created by admins and require an initial password change.
 - Pending faculty approvals are counted on the Admin Dashboard Faculty card and shown as an amber badge on User Management; the login screen no longer prints demo credentials
 - The admin Master User List filters as you type after a 250 ms debounce; pressing Enter is not required, and stale responses cannot overwrite newer results
 - The admin-only **Audit Log** view reads `audit_logs` through a paginated endpoint with search, action, entity type, actor, and date filters; old/new values are summarized and no audit row is editable
@@ -146,11 +203,13 @@ SchedWise provides:
 - [ ] None for the local demo. The former dependency-preflight gap is covered by the launcher; see Implemented. Production blockers are tracked in **Production Backend Backlog** below.
 
 #### TODO
+- [x] Implement student self-registration/admin decisions, Student ID or email login, admin-only faculty creation, and enforced initial password change.
+- [x] Accept personal email domains and supplied Student IDs, send activation emails automatically on approval, and preserve IDs across schema setup.
 - [ ] Add the final logo SVG and enable BrandLogo showMark.
 
 #### P1 — next quality pass
 
-- [x] Expand the committed browser smoke test to privacy placement, dashboard card navigation, faculty onboarding/approval, and the purple theme. The current test covers inline validation, sign-out cancel/accept, admin login/search, appointment filters, report filters/export, the Audit Log view, and seeded role routing.
+- [x] Expand the committed browser smoke test to privacy placement, dashboard card navigation, student approvals and faculty initial password changes, and the purple theme. The current test covers inline validation, sign-out cancel/accept, admin login/search, appointment filters, report filters/export, the Audit Log view, and seeded role routing.
 - [x] Split `frontend/src/App.tsx` into feature components. The root shell now handles session bootstrapping and role routing; shared UI/API helpers and role features live under `frontend/src/shared/` and `frontend/src/features/`.
 - [x] Expand automated coverage to remaining appointment state transitions and reschedule conflict/error states. Report filters, no-show guards, and student reschedule-request approval are covered.
 - [x] Add clearer reschedule-request UI text and dedicated retry/error states for scheduling conflicts.
@@ -306,7 +365,7 @@ Generated folders such as `frontend/node_modules`, `frontend/dist`, and `.runtim
 
 ### Student
 
-- Self-register as a student. Student accounts activate after email verification.
+- Self-register as a student with a Student ID and personal email. Accounts remain pending until administrator approval.
 - Browse active faculty and availability/overrides.
 - Create appointments for themselves only, with at most one request awaiting approval/rejection per faculty (including `reschedule_requested`). Requests to different faculty are allowed when their times do not overlap.
 - View only their own appointments, notifications, and consultation records. **My Appointments** holds active/pending history; **My History** lists past/finished appointments with shared consultation feedback.
@@ -318,7 +377,7 @@ Generated folders such as `frontend/node_modules`, `frontend/dist`, and `.runtim
 
 ### Faculty
 
-- Self-register through the public form. The account requires email verification and then administrator approval; login returns `faculty_approval_pending` until approval and `faculty_approval_rejected` after rejection.
+- Receive an admin-created faculty account. Change the initial password at first login before accessing protected features. Faculty public registration is disabled.
 - Receive an approval or rejection email after an administrator reviews the registration.
 - Manage their own recurring availability and date overrides.
 - View appointments only where they are the assigned faculty.
@@ -345,7 +404,7 @@ Generated folders such as `frontend/node_modules`, `frontend/dist`, and `.runtim
 
 ### Account IDs and form feedback
 
-Students receive `STU-` IDs (for example `STU-0124`); faculty receive `FAC-` IDs (for example `FAC-0111`). Every public registration automatically allocates the next unique ID for its role. Administrators can supply a unique ID of the correct prefix and at least four digits during creation; doing so advances the sequence so later automatic IDs stay above it. Existing sequence values are resynced to the highest stored ID by `tools/setup-database.php`, and unique indexes prevent duplicates or reuse. Only email and password are accepted at login. STU/FAC IDs identify account records and cannot be used to sign in. Email is also required for verification and password reset. Registration confirmation displays the generated Student or Faculty ID.
+Students provide their own Student ID during public registration; existing `STU-` IDs remain usable. IDs preserve leading zeroes and accept letters, digits, dots, underscores, and hyphens (up to 100 characters). Duplicate Student IDs and emails are rejected. Admin-created faculty receive generated `FAC-` IDs, or an admin can supply a unique `FAC-` ID with at least four digits. Students can sign in with their Student ID or registered email and password. Faculty and administrators sign in with email and password. All account IDs and roles remain permanent.
 
 Email, password, name, ID, registration, reset-password, and booking validation errors appear below their corresponding fields. General create-account errors stay inside the account dialog. Calendar save errors appear in the active sidebar panel. Invalid inputs are marked with `aria-invalid` and associated error messages.
 
@@ -388,7 +447,7 @@ Students use **My Appointments** for active requests and **My History** for past
 - `POST /appointments/index.php`: returns 409 if another request is pending with the same faculty, or any pending/reschedule-requested/confirmed student appointment overlaps on the same date.
 - `POST /auth/login.php`: the `email` parameter requires a valid email address; STU/FAC IDs are rejected with a field-specific 400 response.
 - `POST /users/index.php`: field-specific validation errors; generates a unique STU/FAC ID if omitted.
-- `POST /auth/register.php`: accepts `role_id` `student` or `faculty`; both receive an automatic unique ID, and faculty registrations start with `faculty_approval_status = pending`.
+- `POST /auth/register.php`: accepts students only, requires a supplied unique `student_number` and valid personal email, and creates a pending application.
 - `PUT /users/index.php?id=…`: rejects role/ID changes, including by administrators. With `{ "faculty_approval_action": "approve" | "reject" }`, administrators approve or reject a pending faculty registration; approval requires `email_verified_at`.
 - `DELETE /users/index.php?id=…`: admin-only account deletion (soft delete), retaining history and rejecting self-deletion. Existing sessions stop authenticating.
 - `GET /appointments/index.php` and single-appointment responses include `summary` from the linked consultation record when one exists. `action_items`, `private_notes`, and other consultation fields are not embedded; clients read those from the role-scoped consultation endpoint.
@@ -421,7 +480,7 @@ Students use **My Appointments** for active requests and **My History** for past
 | Table | Purpose |
 | --- | --- |
 | `roles` | student, faculty, admin |
-| `users` | email login identity, STU/FAC profile identifiers, permanent role, status, `faculty_approval_status`, password hash, verification/login timestamps, `deleted_at` |
+| `users` | email identity, supplied student/generated faculty IDs, permanent role, status, `student_approval_status`, `must_change_password`, legacy `faculty_approval_status`, password hash, verification/login timestamps, `deleted_at` |
 | `account_id_sequences` | transaction-locked numeric counters for automatic STU/FAC IDs |
 | `user_profiles` | name, unique permanent student/faculty number, department, program, phone |
 | `departments` | stable department IDs used by profiles and registration |
@@ -452,7 +511,7 @@ Students use **My Appointments** for active requests and **My History** for past
 - ensures roles and demo departments exist
 - adds `users.deleted_at`, `users.faculty_approval_status`, account ID counters, and unique indexes on student/faculty numbers
 - adds audit-log indexes on `created_at`, `action`, and `entity_type` when missing; `actor_user_id` already has the foreign-key index
-- assigns STU-/FAC- IDs to missing, malformed, or duplicate legacy profile IDs, preserving one existing ID per duplicate; login email and history are retained
+- preserves supplied valid Student IDs and existing account history; repairs missing/invalid legacy IDs and retains faculty ID sequences
 - resyncs both account-ID sequences to the highest valid existing ID so automatic IDs stay monotonic after imports or repairs
 
 It does **not** reset passwords, delete users, or wipe appointments.
@@ -512,10 +571,10 @@ All protected endpoints require a session cookie. Unsafe endpoints also require 
 
 | Method | Endpoint | Access | Purpose |
 | --- | --- | --- | --- |
-| POST | `/auth/register.php` | public | Create a pending student or faculty account, allocate a unique ID, and email a verification link |
-| POST | `/auth/verify-email.php` | public | Consume a verification token and invalidate other links; students activate, while faculty remain pending approval |
+| POST | `/auth/register.php` | public | Submit a pending student application with supplied Student ID, personal email, and password; faculty registration is blocked |
+| POST | `/auth/verify-email.php` | public | Handle legacy verification links; pending student approval remains required |
 | POST | `/auth/resend-verification.php` | public | Issue a new link for a pending unverified account; generic response to prevent enumeration |
-| POST | `/auth/login.php` | public | Login and issue session/CSRF token; returns 403 `email_unverified`, `faculty_approval_pending`, or `faculty_approval_rejected` when applicable |
+| POST | `/auth/login.php` | public | Login by student ID or registered email (staff use email); pending/rejected students receive 403; new faculty sessions require password change |
 | POST | `/auth/logout.php` | authenticated + CSRF | Destroy session |
 | GET | `/auth/me.php` | authenticated | Current user + CSRF token |
 | POST | `/auth/change-password.php` | authenticated + CSRF | Verify current password and set a new one |
@@ -528,8 +587,8 @@ All protected endpoints require a session cookie. Unsafe endpoints also require 
 | --- | --- | --- | --- |
 | GET | `/users/index.php` | admin | List/search users |
 | GET | `/users/index.php?id=...` | admin or self | Read one profile |
-| POST | `/users/index.php` | admin | Create account |
-| PUT | `/users/index.php?id=...` | admin or self | Update profile; admin can change status. Pending/rejected faculty use `faculty_approval_action` (`approve`/`reject`). Self-service cannot change role/status or institutional numbers |
+| POST | `/users/index.php` | admin | Create faculty account with mandatory initial password change; student creation is blocked |
+| PUT | `/users/index.php?id=...` | admin or self | Update profile; admin can change status. Pending/rejected students use `student_approval_action` (`approve`/`reject`). Self-service cannot change role/status or institutional numbers |
 
 ### Audit log
 
@@ -579,14 +638,14 @@ All protected endpoints require a session cookie. Unsafe endpoints also require 
 ### Authentication and sessions
 
 - Password hashes use `password_hash(..., PASSWORD_DEFAULT)`.
-- Registration requires an institutional email address and a password with at least 8 characters, uppercase, lowercase, a digit, and a special character.
+- Registration requires a valid personal or institutional email address, a supplied Student ID, and a password with at least 8 characters, uppercase, lowercase, a digit, and a special character.
 - The registration form mirrors these checks and displays the API's field-level validation errors; the server remains authoritative.
 - The registration email field deliberately disables browser autofill (`autocomplete="off"`, an explicit field name, and `type="text"` with `inputMode="email"`). Brave 1.97 can crash in its browser process when its email autofill dropdown opens on this form; do not re-enable autofill there without testing Brave.
-- Self-registered students and faculty start as `pending`. The verification token is stored only as a SHA-256 hash, expires after 24 hours, is single-use, and is invalidated when a newer link is issued. Opening the link sets `email_verified_at`; students activate immediately, while faculty remain pending until administrator approval. Verification is idempotent for browser retries.
+- Students self-register as `pending` and need an admin decision; faculty cannot self-register. Legacy verification links may verify email but cannot bypass student approval. Historical verification behavior: The verification token is stored only as a SHA-256 hash, expires after 24 hours, is single-use, and is invalidated when a newer link is issued. Opening a legacy link sets `email_verified_at`; pending students remain blocked until administrator approval. Verification is idempotent for browser retries.
 - Verification links point at the React app (`/?verify_token=...`), which submits the token to the API and removes it from the address bar. The raw token is never logged.
-- Pending and rejected faculty are rejected on every request even if their raw status is active. Approval/rejection is admin-only and uses a separate action so the ordinary status dropdown cannot bypass review.
+- Pending and rejected student applications are blocked on every request even if their raw status is active. Legacy pending/rejected faculty also remain blocked. Approval/rejection is admin-only and uses a separate action so the ordinary status dropdown cannot bypass review.
 - Approval and rejection send a decision email and an in-app notification without exposing tokens or credentials.
-- Demo accounts are active and verified. Administrator-created accounts are marked email-verified, default to active, and are treated as already approved when the role is faculty; an administrator can also create a pending account or activate one manually.
+- Demo accounts are preserved. Only faculty accounts can be created by an administrator; newly created faculty must change the initial password before accessing protected features.
 - Session cookie is HttpOnly, SameSite=Lax, strict mode, and Secure automatically on HTTPS.
 - Session ID is regenerated on login.
 - Idle timeout: 2 hours. Absolute timeout: 12 hours.
@@ -840,14 +899,13 @@ Use this before handing the project to someone:
 - [ ] Admin cannot set their own account to `pending`.
 - [ ] Forgot-password email arrives in Mailpit and the debug code is returned only for localhost when debug is on.
 - [ ] A reset code is single-use and expires after 30 minutes.
-- [ ] Registration shows clear errors for a non-institutional email, weak password, and first-name-only input.
-- [ ] Typing in the registration email field does not open a browser autofill dropdown in Brave, and the custom non-institutional email error still appears.
-- [ ] A successful student registration creates a `pending` account with a generated `STU-` ID, lands on login with the email prefilled, and shows the check-email notice.
-- [ ] A successful faculty registration creates a `pending` account with a generated `FAC-` ID, displays the approval requirement, and sends a faculty-specific verification email.
-- [ ] Unverified login is rejected with the resend prompt; resend sends a fresh link and invalidates the old one.
-- [ ] Opening a student verification link from Mailpit activates the account, shows the success notice, and removes `verify_token` from the address bar.
-- [ ] Opening a faculty verification link verifies the email but leaves login blocked with `faculty_approval_pending`; approval is disabled in User Management until verification completes.
-- [ ] Admin approval sends a decision email and notification, and the teacher can then sign in to the Faculty Dashboard. Rejection blocks login with `faculty_approval_rejected`.
+- [ ] Registration accepts personal email and shows clear errors for malformed email, missing/invalid Student ID, duplicate IDs, weak password, and first-name-only input.
+- [ ] Typing in the registration email field does not open a browser autofill dropdown in Brave, and valid personal email addresses are accepted.
+- [ ] A successful student registration creates a `pending` account with the supplied Student ID, lands on login with the Student ID prefilled, and shows the pending administrator approval notice.
+- [ ] Public faculty registration is unavailable and rejected by the API.
+- [ ] Admin-created faculty must change the initial password before accessing the Faculty Dashboard, including after a reload.
+- [ ] Student approval sends an activation/welcome email and in-app notification; approved students can sign in with either their ID or registered email. Rejection blocks login with `student_approval_rejected`.
+- [ ] A legacy student email-verification link cannot bypass pending administrator approval.
 - [ ] Re-opening the same verification link is harmless for the verified account, while a different invalid token is rejected.
 - [ ] Automatic STU/FAC IDs are unique and sequential; manually supplied IDs advance the sequence, and duplicate IDs are rejected.
 - [ ] The Admin **Audit Log** is visible only to administrators; search, action/entity/date filters, and pagination work, and malformed dates are rejected.
@@ -1050,7 +1108,7 @@ Known risk areas:
 - User Management shows a **Faculty approvals** panel. Approve is disabled until email verification; pending faculty cannot be activated through the generic status dropdown. `PUT /users/index.php?id=…` accepts `faculty_approval_action`.
 - Hardened the ID allocator: automatic IDs are sequence-backed, unique indexes remain enforced, manually supplied IDs advance the sequence, and setup resyncs sequences to the highest stored ID.
 - Updated the API regression suite to 13 tests at that stage (now 14) and added the faculty approval/rejection flow and unique-ID assertions.
-- Last verified 2026-10-21: additive database migration and sequence resync applied to the local database with a fresh pre-migration backup; PHP lint, TypeScript check, Vite production build, 13/13 API tests at that stage, 4/4 client CSRF tests, Mailpit fixture and decision-email checks, and a full headless Brave faculty onboarding/approval/dashboard flow passed with zero JavaScript exceptions. Multi-worker concurrency coverage remains pending.
+- Last verified 2026-10-21: additive database migration and sequence resync applied to the local database with a fresh pre-migration backup; PHP lint, TypeScript check, Vite production build, 13/13 API tests at that stage, 4/4 client CSRF tests, Mailpit fixture and decision-email checks, and a full headless Brave student approvals and faculty initial password changes/dashboard flow passed with zero JavaScript exceptions. Multi-worker concurrency coverage remains pending.
 
 #### Pending-approval visibility and login polish
 

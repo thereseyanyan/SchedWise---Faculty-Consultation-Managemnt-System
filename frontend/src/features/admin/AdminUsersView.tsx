@@ -26,7 +26,7 @@ export function AdminUsersView({ roleFilter }: { roleFilter?: string }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
-  const [createType, setCreateType] = useState<"Faculty" | "Student" | null>(null)
+  const [createType, setCreateType] = useState<"Faculty" | null>(null)
   const [createErrors, setCreateErrors] = useState<Record<string, string>>({})
   const [createError, setCreateError] = useState("")
   const currentUser = useContext(CurrentUserContext)
@@ -39,7 +39,7 @@ export function AdminUsersView({ roleFilter }: { roleFilter?: string }) {
     program: "Computer Science",
   })
   const [saving, setSaving] = useState(false)
-  const [pendingFaculty, setPendingFaculty] = useState<ManagedUser[]>([])
+  const [pendingStudents, setPendingStudents] = useState<ManagedUser[]>([])
   const [approvalBusy, setApprovalBusy] = useState<string | null>(null)
   const [approvalNotice, setApprovalNotice] = useState("")
   const searchRequestId = useRef(0)
@@ -61,14 +61,14 @@ export function AdminUsersView({ roleFilter }: { roleFilter?: string }) {
     }
   }
 
-  const loadPendingFaculty = async () => {
+  const loadPendingStudents = async () => {
     try {
-      const rows = await usersApi.list({ role_id: "faculty", status: "pending" })
-      setPendingFaculty(
-        rows.filter((row) => row.faculty_approval_status === "pending"),
+      const rows = await usersApi.list({ role_id: "student", status: "pending" })
+      setPendingStudents(
+        rows.filter((row) => row.student_approval_status === "pending"),
       )
     } catch (err) {
-      setError(errorMessage(err, "Failed to load faculty approvals"))
+      setError(errorMessage(err, "Failed to load student applications"))
     }
   }
 
@@ -80,7 +80,7 @@ export function AdminUsersView({ roleFilter }: { roleFilter?: string }) {
   }, [search, roleFilter])
 
   useEffect(() => {
-    void loadPendingFaculty()
+    void loadPendingStudents()
   }, [])
 
   const deleteAccount = async (id: string) => {
@@ -102,26 +102,27 @@ export function AdminUsersView({ roleFilter }: { roleFilter?: string }) {
     }
   }
 
-  const reviewFaculty = async (id: string, action: "approve" | "reject") => {
+  const reviewStudent = async (id: string, action: "approve" | "reject") => {
     const verb = action === "approve" ? "Approve" : "Reject"
-    if (!await confirmAction(`${verb} this faculty registration?`)) return
+    if (!await confirmAction(`${verb} this student application?`)) return
     setApprovalBusy(id)
     setApprovalNotice("")
     setError(null)
     try {
       const updated = action === "approve"
-        ? await usersApi.approveFaculty(id)
-        : await usersApi.rejectFaculty(id)
-      setPendingFaculty((current) => current.filter((user) => user.id !== id))
+        ? await usersApi.approveStudent(id)
+        : await usersApi.rejectStudent(id)
+      setPendingStudents((current) => current.filter((user) => user.id !== id))
       setUsers((current) => current.map((user) => (user.id === id ? updated : user)))
       setApprovalNotice(
         action === "approve"
-          ? "Faculty account approved. The teacher can now sign in."
-          : "Faculty registration rejected.",
+          ? "Student application approved. The student can now sign in with their Student ID or email."
+          : "Student application rejected.",
       )
+      if (updated.notification_email_sent === false) setError("The decision was saved, but the notification email could not be sent. Check the SMTP configuration.")
       window.dispatchEvent(new Event("schedwise:users-changed"))
     } catch (err) {
-      setError(errorMessage(err, "Failed to update faculty approval."))
+      setError(errorMessage(err, "Failed to update student approval."))
     } finally {
       setApprovalBusy(null)
     }
@@ -146,10 +147,10 @@ export function AdminUsersView({ roleFilter }: { roleFilter?: string }) {
         password: form.password,
         first_name: form.first_name.trim(),
         last_name: form.last_name.trim(),
-        role_id: createType === "Faculty" ? "faculty" : "student",
+        role_id: "faculty",
         status: "active",
-        faculty_number: createType === "Faculty" && form.id_number ? `FAC-${form.id_number}` : undefined,
-        student_number: createType === "Student" && form.id_number ? `STU-${form.id_number}` : undefined,
+        faculty_number: form.id_number ? `FAC-${form.id_number}` : undefined,
+
         program: form.program || undefined,
       })
       setCreateType(null)
@@ -177,15 +178,9 @@ export function AdminUsersView({ roleFilter }: { roleFilter?: string }) {
       <PageTitle
         eyebrow="Administration"
         title="User Management"
-        description="Create accounts with permanent roles and manage account access."
+        description="Review student applications, create faculty accounts, and manage account access."
         action={
           <div className="flex flex-wrap gap-2">
-            <Button
-              onClick={() => { setCreateErrors({}); setCreateError(""); setCreateType("Student") }}
-              className="gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-            >
-              <Plus size={15} /> Register Student
-            </Button>
             <Button
               onClick={() => { setCreateErrors({}); setCreateError(""); setCreateType("Faculty") }}
               className="gap-2 rounded-[4px] bg-purple-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-purple-700"
@@ -200,21 +195,20 @@ export function AdminUsersView({ roleFilter }: { roleFilter?: string }) {
           {error}
         </p>
       )}
-      {(pendingFaculty.length > 0 || approvalNotice) && (
+      {(pendingStudents.length > 0 || approvalNotice) && (
         <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50/50 p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="text-sm font-semibold text-slate-900">
-                Faculty approvals
+                Student applications
               </h2>
               <p className="mt-1 text-xs leading-5 text-slate-500">
-                Self-registered faculty must verify their email before an
-                administrator can approve them.
+                Review student details, then approve or reject their applications.
               </p>
             </div>
-            {pendingFaculty.length > 0 && (
+            {pendingStudents.length > 0 && (
               <StatusBadge tone="warning">
-                {pendingFaculty.length} pending
+                {pendingStudents.length} pending
               </StatusBadge>
             )}
           </div>
@@ -224,42 +218,40 @@ export function AdminUsersView({ roleFilter }: { roleFilter?: string }) {
             </p>
           )}
           <div className="mt-4 space-y-3">
-            {pendingFaculty.map((facultyUser) => {
+            {pendingStudents.map((studentUser) => {
               const name =
-                [facultyUser.first_name, facultyUser.last_name]
+                [studentUser.first_name, studentUser.last_name]
                   .filter(Boolean)
-                  .join(" ") || facultyUser.email
-              const busy = approvalBusy === facultyUser.id
+                  .join(" ") || studentUser.email
+              const busy = approvalBusy === studentUser.id
               return (
                 <div
-                  key={facultyUser.id}
+                  key={studentUser.id}
                   className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div>
                     <p className="text-sm font-semibold text-slate-800">{name}</p>
                     <p className="mt-0.5 text-xs text-slate-500">
-                      {facultyUser.email}
-                      {facultyUser.faculty_number
-                        ? ` · ${facultyUser.faculty_number}`
+                      {studentUser.email}
+                      {studentUser.student_number
+                        ? ` · ${studentUser.student_number}`
                         : ""}
                     </p>
                     <p className="mt-1 text-[11px] text-slate-500">
-                      {facultyUser.email_verified_at
-                        ? "Email verified — ready for an administrator decision."
-                        : "Email not verified yet. Approval is disabled until verification."}
+                      Awaiting administrator review.
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Button
-                      disabled={busy || !facultyUser.email_verified_at}
-                      onClick={() => void reviewFaculty(facultyUser.id, "approve")}
+                      disabled={busy}
+                      onClick={() => void reviewStudent(studentUser.id, "approve")}
                       className="rounded-lg bg-purple-600 px-3 py-2 text-xs font-semibold text-white hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {busy ? "Saving…" : "Approve"}
                     </Button>
                     <Button
                       disabled={busy}
-                      onClick={() => void reviewFaculty(facultyUser.id, "reject")}
+                      onClick={() => void reviewStudent(studentUser.id, "reject")}
                       className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Reject
@@ -338,15 +330,15 @@ export function AdminUsersView({ roleFilter }: { roleFilter?: string }) {
                   <div className="flex items-center gap-3"><span className="text-xs font-semibold text-purple-700">{roleLabel(user.role_id)}</span>
                     <Button disabled={user.id === currentUser?.id} onClick={() => void deleteAccount(user.id)} className="rounded-lg border border-rose-200 px-3 py-2 text-xs text-rose-700 hover:bg-rose-50">Delete</Button>
                   </div>
-                  {user.role_id === "faculty" && user.faculty_approval_status === "pending" ? (
+                  {user.role_id === "student" && user.student_approval_status === "pending" ? (
                     <div className="flex flex-wrap items-center gap-2">
                       <StatusBadge tone="warning">
-                        {user.email_verified_at ? "Awaiting approval" : "Email unverified"}
+                        Awaiting approval
                       </StatusBadge>
-                      {user.email_verified_at && (
+                      {(
                         <Button
                           disabled={approvalBusy === user.id}
-                          onClick={() => void reviewFaculty(user.id, "approve")}
+                          onClick={() => void reviewStudent(user.id, "approve")}
                           className="rounded-lg bg-purple-600 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-purple-700 disabled:opacity-50"
                         >
                           Approve
@@ -354,13 +346,13 @@ export function AdminUsersView({ roleFilter }: { roleFilter?: string }) {
                       )}
                       <Button
                         disabled={approvalBusy === user.id}
-                        onClick={() => void reviewFaculty(user.id, "reject")}
+                        onClick={() => void reviewStudent(user.id, "reject")}
                         className="rounded-lg border border-rose-200 px-2.5 py-1.5 text-[11px] font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
                       >
                         Reject
                       </Button>
                     </div>
-                  ) : user.role_id === "faculty" && user.faculty_approval_status === "rejected" ? (
+                  ) : user.role_id === "student" && user.student_approval_status === "rejected" ? (
                     <StatusBadge tone="danger">Rejected</StatusBadge>
                   ) : (
                     <SelectTag
@@ -393,12 +385,10 @@ export function AdminUsersView({ roleFilter }: { roleFilter?: string }) {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-lg font-semibold text-slate-900">
-                  {createType === "Faculty"
-                    ? "Create Faculty Account"
-                    : "Register Student"}
+                  Create Faculty Account
                 </p>
                 <p className="mt-1 text-xs text-slate-500">
-                  This account will receive {createType.toLowerCase()} permissions.
+                  The faculty member must change this initial password at first login.
                 </p>
               </div>
               <Button
@@ -425,13 +415,13 @@ export function AdminUsersView({ roleFilter }: { roleFilter?: string }) {
               <FieldError id="create-last_name-error" message={createErrors.last_name} />
               <div>
                 <label htmlFor="create-id-digits" className="mb-1.5 block text-xs font-semibold text-slate-600">
-                  {createType === "Faculty" ? "Faculty ID" : "Student ID"}
+                  Faculty ID
                 </label>
                 <div className={`flex items-center overflow-hidden rounded-xl border bg-white focus-within:border-purple-600 focus-within:ring-[3px] focus-within:ring-purple-600/15 ${createErrors.id_number ? "border-rose-700" : "border-purple-200"}`}>
                   <span className="self-stretch border-r border-purple-100 bg-purple-50 px-3.5 py-3 text-sm font-semibold text-purple-700" aria-hidden="true">
-                    {createType === "Faculty" ? "FAC-" : "STU-"}
+                    FAC-
                   </span>
-                  <InputTag id="create-id-digits" aria-label={`${createType === "Faculty" ? "FAC-" : "STU-"} ID digits`}
+                  <InputTag id="create-id-digits" aria-label={`$FAC- ID digits`}
                     aria-invalid={!!createErrors.id_number} aria-describedby="create-id-help create-id_number-error"
                     type="text" inputMode="numeric" pattern="[0-9]*" maxLength={96} autoComplete="off"
                     placeholder="0124"
@@ -462,15 +452,6 @@ export function AdminUsersView({ roleFilter }: { roleFilter?: string }) {
                 className={fieldClass}
               />
               <FieldError id="create-password-error" message={createErrors.password} />
-              <SelectTag
-                value={form.program}
-                onChange={(e) => setForm((f) => ({ ...f, program: e.target.value }))}
-                className={fieldClass}
-              >
-                <option>Computer Science</option>
-                <option>Information Technology</option>
-                <option>Information Systems</option>
-              </SelectTag>
               <FieldError message={createError} />
               <Button
                 onClick={() => void createAccount()}

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { AlertTriangle, GraduationCap } from "lucide-react"
 import { authApi, type User } from "./api"
 import { confirmAction } from "./confirmation"
+import { RequiredPasswordChange } from "./features/auth/RequiredPasswordChange"
 import { AuthenticationGate } from "./features/auth/AuthenticationGate"
 import { StudentPortal } from "./features/student/StudentPortal"
 import { FacultyPortal } from "./features/faculty/FacultyPortal"
@@ -78,6 +79,8 @@ export default function App() {
   }
 
   if (!user) return <AuthenticationGate onLogin={setUser} />
+
+  if (user.must_change_password) return <RequiredPasswordChange onChanged={setUser} onSignOut={handleSignOut} />
 
   if (!role) {
     return (

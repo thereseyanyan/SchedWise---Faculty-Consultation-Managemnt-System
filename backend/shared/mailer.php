@@ -153,7 +153,7 @@ function sendEmailVerificationLink(string $to, string $url, string $role = 'stud
     $role = $role === 'faculty' ? 'faculty' : 'student';
     $accountLabel = $role === 'faculty' ? 'faculty' : 'student';
     $approvalNote = $role === 'faculty'
-        ? ' After verification, an administrator must approve your faculty account before you can sign in.'
+        ? ' After verification, an administrator must approve your student account before you can sign in.'
         : '';
 
     $html = <<<HTML
@@ -189,25 +189,33 @@ HTML;
  * Notify a self-registered faculty member that an administrator approved or
  * rejected the account. This email contains no tokens or credentials.
  */
-function sendFacultyApprovalDecision(string $to, string $name, bool $approved): void
+function sendStudentRegistrationReceived(string $to, string $name, string $studentNumber): void
+{
+    $text = "Hello {$name},\n\nWe received your SchedWise registration. Your Student ID is {$studentNumber}. Your account is pending administrator approval. We will email you again when a decision is made.\n\nIf you did not register, contact the system administrator.";
+    $html = '<h1>Registration received</h1><p>'
+        . nl2br(htmlspecialchars($text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')) . '</p>';
+    sendSchedWiseMail($to, 'SchedWise registration received — awaiting approval', $html, $text);
+}
+
+function sendStudentApprovalDecision(string $to, string $name, bool $approved): void
 {
     global $config;
 
     $name = trim($name);
-    $safeName = htmlspecialchars($name !== '' ? $name : 'Faculty member', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $safeName = htmlspecialchars($name !== '' ? $name : 'Student', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     $frontendUrl = (string)($config['app']['frontend_url'] ?? 'http://localhost:5173');
     $safeUrl = htmlspecialchars(rtrim($frontendUrl, '/'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 
     if ($approved) {
-        $subject = 'Your SchedWise faculty account has been approved';
-        $heading = 'Faculty account approved';
-        $body = 'Your email address is verified and an administrator approved your faculty account. You can now sign in to SchedWise and manage your consultation availability.';
-        $text = "SchedWise faculty account approved\n\nHello {$name},\n\nYour email address is verified and an administrator approved your faculty account. You can now sign in:\n{$frontendUrl}\n";
+        $subject = 'Your SchedWise student account has been approved';
+        $heading = 'Student account approved';
+        $body = 'Welcome to SchedWise! Your student account is activated and ready for login. Sign in with your Student ID or registered email and password to book consultations.';
+        $text = "SchedWise student account approved\n\nHello {$name},\n\nWelcome to SchedWise! Your student account is activated and ready for login. Use your Student ID or registered email and password:\n{$frontendUrl}\n";
     } else {
-        $subject = 'Your SchedWise faculty registration was not approved';
-        $heading = 'Faculty registration not approved';
-        $body = 'An administrator reviewed your faculty registration and did not approve it. Contact the system administrator if you believe this is a mistake.';
-        $text = "SchedWise faculty registration not approved\n\nHello {$name},\n\nAn administrator reviewed your faculty registration and did not approve it. Contact the system administrator if you believe this is a mistake.\n";
+        $subject = 'Your SchedWise student registration was not approved';
+        $heading = 'Student registration not approved';
+        $body = 'An administrator reviewed your student registration and did not approve it. Contact the system administrator if you believe this is a mistake.';
+        $text = "SchedWise student registration not approved\n\nHello {$name},\n\nAn administrator reviewed your student registration and did not approve it. Contact the system administrator if you believe this is a mistake.\n";
     }
 
     $html = <<<HTML

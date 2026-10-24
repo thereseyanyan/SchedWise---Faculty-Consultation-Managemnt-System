@@ -48,7 +48,7 @@ try {
 
     $pdo->beginTransaction();
 
-    $statement = $pdo->prepare('UPDATE users SET password_hash = :password_hash, updated_at = NOW() WHERE id = :id');
+    $statement = $pdo->prepare('UPDATE users SET password_hash = :password_hash, must_change_password = 0, updated_at = NOW() WHERE id = :id');
     $statement->execute([
         ':password_hash' => $newHash,
         ':id' => $user['id'],

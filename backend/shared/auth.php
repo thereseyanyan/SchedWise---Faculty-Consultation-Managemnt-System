@@ -91,12 +91,12 @@ function authenticateUser(): array
 
     global $pdo;
     $statement = $pdo->prepare(
-        'SELECT u.id, u.email, u.role_id, u.status, u.faculty_approval_status, u.password_hash,
+        'SELECT u.id, u.email, u.role_id, u.status, u.faculty_approval_status, u.student_approval_status, u.must_change_password, u.password_hash,
                 up.first_name, up.last_name,
                 up.student_number, up.faculty_number, up.department_id, up.program, up.phone
          FROM users u
          LEFT JOIN user_profiles up ON u.id = up.user_id
-         WHERE u.id = :id'
+         WHERE u.id = :id AND u.deleted_at IS NULL'
     );
     $statement->execute([':id' => $_SESSION['user_id']]);
     $user = $statement->fetch();
@@ -105,7 +105,7 @@ function authenticateUser(): array
         && ($user['role_id'] ?? null) === 'faculty'
         && in_array($user['faculty_approval_status'] ?? '', ['pending', 'rejected'], true);
 
-    if (!$user || $user['status'] !== 'active' || $pendingFaculty) {
+    if (!$user || $user['status'] !== 'active' || $pendingFaculty || ($user['role_id'] === 'student' && in_array($user['student_approval_status'], ['pending', 'rejected'], true))) {
         destroySession();
         respond(['error' => 'Invalid session'], 401);
     }
@@ -122,6 +122,11 @@ function authenticateUser(): array
 
     $_SESSION['last_activity'] = time();
 
+    // Restricted sessions may only inspect themselves, change password, or sign out.
+    $path = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
+    if ((bool)$user['must_change_password'] && !in_array(basename($path), ['me.php', 'change-password.php', 'logout.php'], true)) {
+        respond(['error' => 'Change your initial password before accessing the system.', 'code' => 'password_change_required'], 403);
+    }
     return $user;
 }
 

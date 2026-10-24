@@ -9,15 +9,13 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $input = jsonInput();
-$email = strtolower(trim((string)($input['email'] ?? '')));
+$email = strtolower(trim((string)($input['identifier'] ?? $input['student_number'] ?? $input['email'] ?? '')));
 $password = (string)($input['password'] ?? '');
 
 if ($email === '' || $password === '') {
-    respond(['error' => 'Email and password are required'], 400);
+    respond(['error' => 'Student ID or email and password are required'], 400);
 }
-if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-    respond(['error' => 'Enter a valid email address.', 'fields' => ['email' => 'Enter a valid email address.']], 400);
-}
+
 
 global $pdo;
 
@@ -37,14 +35,14 @@ $dummyHash = '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2uheWG/igi.';
 try {
     $statement = $pdo->prepare(
         'SELECT u.id, u.email, u.password_hash, u.role_id, u.status, u.email_verified_at,
-                u.faculty_approval_status,
+                u.faculty_approval_status, u.student_approval_status, u.must_change_password,
                 up.first_name, up.last_name, up.student_number, up.faculty_number,
                 up.department_id, up.program, up.phone
          FROM users u
          LEFT JOIN user_profiles up ON u.id = up.user_id
-         WHERE LOWER(u.email) = :email'
+         WHERE u.deleted_at IS NULL AND ((u.role_id = \'student\' AND up.student_number = :student_id) OR (u.role_id IN (\'student\', \'faculty\', \'admin\') AND LOWER(u.email) = :email))'
     );
-    $statement->execute([':email' => $email]);
+    $statement->execute([':student_id' => strtoupper($email), ':email' => $email]);
     $user = $statement->fetch();
 
     if (!$user) {
@@ -62,32 +60,14 @@ try {
         respond(['error' => 'Invalid credentials'], 401);
     }
 
-    // Correct credentials for an unverified self-registration should lead to
-    // the verification/resend UI rather than a generic credentials error.
-    if ($user['status'] === 'pending' && $user['email_verified_at'] === null) {
-        logAudit('login_unverified', 'user', $user['id']);
-        respond([
-            'error' => 'Verify your email address before signing in. Check your inbox or request a new verification link.',
-            'code' => 'email_unverified',
-        ], 403);
+    if ($user['role_id'] === 'student' && in_array($user['student_approval_status'], ['pending', 'rejected'], true)) {
+        $pending = $user['student_approval_status'] === 'pending';
+        respond(['error' => $pending ? 'Your student application is awaiting administrator approval.' : 'Your student application was rejected. Contact the administrator.',
+            'code' => $pending ? 'student_approval_pending' : 'student_approval_rejected'], 403);
     }
-
-    if ($user['role_id'] === 'faculty' && $user['faculty_approval_status'] === 'pending') {
-        logAudit('login_pending_faculty_approval', 'user', $user['id']);
-        respond([
-            'error' => 'Your email is verified, but your faculty account is awaiting administrator approval.',
-            'code' => 'faculty_approval_pending',
-        ], 403);
+    if ($user['role_id'] === 'faculty' && in_array($user['faculty_approval_status'], ['pending', 'rejected'], true)) {
+        respond(['error' => 'Contact the administrator to provision your faculty account.'], 403);
     }
-
-    if ($user['role_id'] === 'faculty' && $user['faculty_approval_status'] === 'rejected') {
-        logAudit('login_rejected_faculty', 'user', $user['id']);
-        respond([
-            'error' => 'Your faculty registration was not approved. Contact the system administrator.',
-            'code' => 'faculty_approval_rejected',
-        ], 403);
-    }
-
     // Do not reveal whether the account exists but is inactive/suspended.
     if ($user['status'] !== 'active') {
         recordRateLimitAttempt('login', $accountKey);
@@ -119,6 +99,8 @@ try {
             'email' => $user['email'],
             'role_id' => $user['role_id'],
             'status' => $user['status'],
+            'must_change_password' => (bool)$user['must_change_password'],
+            'student_approval_status' => $user['student_approval_status'],
             'faculty_approval_status' => $user['faculty_approval_status'] ?? null,
             'first_name' => $user['first_name'] ?? null,
             'last_name' => $user['last_name'] ?? null,

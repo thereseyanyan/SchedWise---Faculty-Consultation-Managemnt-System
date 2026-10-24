@@ -9,20 +9,19 @@ import {
   departmentIds,
   departments,
   errorMessage,
-  institutionalEmailPattern,
+  emailPattern,
   isStrongPassword,
   passwordPolicyMessage,
 } from "../../shared"
 
 type SignUpFormProps = {
-  onSuccess: (email: string) => void
+  onSuccess: (studentNumber: string, emailSent: boolean) => void
   onLogin: () => void
-  initialRole?: "student" | "faculty"
 }
 
-export function SignUpForm({ onSuccess, onLogin, initialRole = "student" }: SignUpFormProps) {
-  const [role, setRole] = useState<"student" | "faculty">(initialRole)
+export function SignUpForm({ onSuccess, onLogin }: SignUpFormProps) {
   const [fullName, setFullName] = useState("")
+  const [studentNumber, setStudentNumber] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
@@ -38,13 +37,14 @@ export function SignUpForm({ onSuccess, onLogin, initialRole = "student" }: Sign
     e.preventDefault()
     const newErrors: Record<string, string> = {}
     const nameParts = fullName.trim().split(/\s+/)
+    if (!/^[A-Z0-9][A-Z0-9._-]{0,99}$/i.test(studentNumber.trim())) newErrors.student_number = "Enter your Student ID (1–100 letters, digits, dots, hyphens, or underscores)."
     if (nameParts.length < 2) newErrors.fullName = "Enter your first and last name."
-    if (!institutionalEmailPattern.test(email.trim())) newErrors.email = "Use an institutional email address, such as name@schedwise.edu."
+    if (!emailPattern.test(email.trim())) newErrors.email = "Enter a valid email address, such as name@gmail.com."
     if (!isStrongPassword(password)) newErrors.password = passwordPolicyMessage
     if (password !== confirmPassword) newErrors.confirmPassword = "Passwords do not match."
     const deptId = departmentIds[department]
     if (!deptId) newErrors.department = "Select a valid department."
-    if (role === "student" && !major.trim()) newErrors.major = "Select your course."
+    if (!major.trim()) newErrors.major = "Select your course."
     setErrors(newErrors)
     setGeneralError("")
     if (Object.keys(newErrors).length > 0) return
@@ -52,20 +52,22 @@ export function SignUpForm({ onSuccess, onLogin, initialRole = "student" }: Sign
     setLoading(true)
     try {
       const result = await authApi.register({
+        student_number: studentNumber.trim().toUpperCase(),
         email: email.trim().toLowerCase(),
         password,
         first_name: nameParts[0],
         last_name: nameParts.slice(1).join(" "),
-        role_id: role,
+        role_id: "student",
         department_id: deptId,
-        program: role === "student" ? major.trim() : undefined,
+        program: major.trim(),
       })
-      onSuccess(email.trim().toLowerCase())
+      onSuccess(result.student_number || "", result.email_sent === true)
     } catch (err) {
       if (err instanceof ApiError) {
         const fieldErrors: Record<string, string> = {}
         if (err.fields.first_name) fieldErrors.fullName = err.fields.first_name
         if (err.fields.last_name && !fieldErrors.fullName) fieldErrors.fullName = err.fields.last_name
+        if (err.fields.student_number) fieldErrors.student_number = err.fields.student_number
         if (err.fields.email) fieldErrors.email = err.fields.email
         if (err.fields.password) fieldErrors.password = err.fields.password
         if (err.fields.department_id) fieldErrors.department = err.fields.department_id
@@ -95,10 +97,15 @@ export function SignUpForm({ onSuccess, onLogin, initialRole = "student" }: Sign
   return (
     <form onSubmit={handleSubmit} noValidate className="flex flex-col max-h-[70vh] md:max-h-[90vh] overflow-y-auto pr-1">
       <div className="mb-6">
-        <h1 className="font-display text-3xl font-bold text-schedwise-navy" id="signup-title">Create Account</h1>
+        <h1 className="font-display text-3xl font-bold text-schedwise-navy" id="signup-title">Student Registration</h1>
         <p className="mt-1 text-sm text-schedwise-body">Sign up to get started with SchedWise</p>
       </div>
       <div className="space-y-3">
+        <div>
+          <label htmlFor="registration-student-id" className="block text-sm font-medium text-schedwise-navy">Student ID</label>
+          <InputTag id="registration-student-id" value={studentNumber} onChange={e => { setStudentNumber(e.target.value); setErrors(prev => ({ ...prev, student_number: "" })) }} placeholder="Enter your Student ID" autoComplete="off" maxLength={100} aria-invalid={!!errors.student_number} aria-describedby="registration-student-id-error" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+          <FieldError id="registration-student-id-error" message={errors.student_number} />
+        </div>
         <div>
           <label className="block text-sm font-medium text-schedwise-navy">Full Name</label>
           <InputTag
@@ -113,13 +120,14 @@ export function SignUpForm({ onSuccess, onLogin, initialRole = "student" }: Sign
           {errors.fullName ? <FieldError message={errors.fullName} /> : null}
         </div>
         <div>
-          <label className="block text-sm font-medium text-schedwise-navy">Email</label>
+          <label htmlFor="registration-email" className="block text-sm font-medium text-schedwise-navy">Personal Email</label>
           <InputTag
             type="text"
             inputMode="email"
             autoCapitalize="none"
             autoCorrect="off"
             spellCheck={false}
+            id="registration-email"
             name="schedwise_registration_email"
             autoComplete="off"
             value={email}
@@ -127,24 +135,10 @@ export function SignUpForm({ onSuccess, onLogin, initialRole = "student" }: Sign
               setEmail(e.target.value)
               setErrors((prev) => ({ ...prev, email: "" }))
             }}
-            placeholder="name@university.edu"
+            placeholder="name@gmail.com"
             className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-schedwise-purple focus:outline-none focus:ring-2 focus:ring-schedwise-purple/20"
           />
           {errors.email ? <FieldError message={errors.email} /> : null}
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-schedwise-navy">Role</label>
-          <SelectTag
-            value={role}
-            onChange={(e) => {
-              setRole(e.target.value as "student" | "faculty")
-              setErrors((prev) => ({ ...prev, major: "" }))
-            }}
-            className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-schedwise-purple focus:outline-none focus:ring-2 focus:ring-schedwise-purple/20"
-          >
-            <option value="student">Student</option>
-            <option value="faculty">Faculty</option>
-          </SelectTag>
         </div>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div>
@@ -200,7 +194,7 @@ export function SignUpForm({ onSuccess, onLogin, initialRole = "student" }: Sign
             {errors.confirmPassword ? <FieldError message={errors.confirmPassword} /> : null}
           </div>
         </div>
-        <div className={role === "student" ? "grid grid-cols-1 gap-3 md:grid-cols-2" : ""}>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div>
             <label className="block text-sm font-medium text-schedwise-navy">Department / College</label>
             <SelectTag
@@ -219,7 +213,7 @@ export function SignUpForm({ onSuccess, onLogin, initialRole = "student" }: Sign
             </SelectTag>
             {errors.department ? <FieldError message={errors.department} /> : null}
           </div>
-          {role === "student" ? (
+          {(
             <div>
               <label className="block text-sm font-medium text-schedwise-navy">Major / Course</label>
               <SelectTag
@@ -238,7 +232,7 @@ export function SignUpForm({ onSuccess, onLogin, initialRole = "student" }: Sign
               </SelectTag>
               {errors.major ? <FieldError message={errors.major} /> : null}
             </div>
-          ) : null}
+          )}
         </div>
         {(generalError || errors.general) ? <FieldError message={generalError || errors.general} /> : null}
       </div>
@@ -255,8 +249,9 @@ export function SignUpForm({ onSuccess, onLogin, initialRole = "student" }: Sign
           Login
         </button>
       </p>
+      <p className="mt-3 text-xs text-slate-500">Your registration details are used to review your application and manage consultations. Use your own Student ID. You can sign in with that ID or your registered email after approval. Faculty accounts are created by an administrator.</p>
       <p className="mt-2 text-center text-xs text-slate-400">
-        {role === "faculty" ? "Faculty accounts need administrator approval after email verification." : "Student accounts activate after email verification."}
+        Student applications remain pending until an administrator approves them.
       </p>
     </form>
   )

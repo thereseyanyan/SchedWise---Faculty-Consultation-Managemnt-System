@@ -16,20 +16,27 @@ if (isRateLimited('register', $ip, 10, 3600)) {
 recordRateLimitAttempt('register', $ip);
 
 $input = jsonInput();
+$input['role_id'] = $input['role_id'] ?? 'student';
+if (is_string($input['role_id'])) $input['role_id'] = strtolower(trim($input['role_id']));
+$typeErrors = validateRegistrationData($input);
+if ($typeErrors !== []) {
+    respond(['error' => 'Validation failed', 'fields' => $typeErrors], 400);
+}
+foreach (['first_name', 'last_name'] as $field) $input[$field] = trim($input[$field]);
+$input['email'] = strtolower(trim((string)($input['email'] ?? '')));
+$input['student_number'] = strtoupper(trim((string)($input['student_number'] ?? '')));
 
-// Public self-registration is available to students and faculty. Faculty
-// accounts additionally require administrator approval after email
-// verification; administrator accounts are never self-registered.
+// Only students may submit public applications.
 $role = strtolower(trim((string)($input['role_id'] ?? 'student')));
-if (!in_array($role, ['student', 'faculty'], true)) {
-    respond(['error' => 'Only student and faculty accounts can be self-registered'], 403);
+if ($role !== 'student') {
+    respond(['error' => 'Only students can self-register. Faculty accounts are created by an administrator.'], 403);
 }
 $input['role_id'] = $role;
 
 // Validate input
-$validationErrors = validateRegistrationData($input);
-if ($role === 'faculty' && empty($input['department_id'])) {
-    $validationErrors['department_id'] = 'Select a department.';
+$validationErrors = [];
+if (!validateStudentNumber($input['student_number'])) {
+    $validationErrors['student_number'] = 'Enter your Student ID (1–100 letters, digits, dots, hyphens, or underscores).';
 }
 if (!empty($validationErrors)) {
     respond(['error' => 'Validation failed', 'fields' => $validationErrors], 400);
@@ -76,18 +83,20 @@ if ($statement->fetch()) {
 
 try {
     $pdo->beginTransaction();
-    $accountNumber = allocateAccountNumber($pdo, $role);
-    $studentNumber = $role === 'student' ? $accountNumber : null;
-    $facultyNumber = $role === 'faculty' ? $accountNumber : null;
+    $studentNumber = $input['student_number'];
+    $facultyNumber = null;
+    $existingNumber = $pdo->prepare('SELECT user_id FROM user_profiles WHERE student_number = ?');
+    $existingNumber->execute([$studentNumber]);
+    if ($existingNumber->fetchColumn()) {
+        $pdo->rollBack();
+        respond(['error' => 'Student ID already registered', 'fields' => ['student_number' => 'This Student ID is already registered.']], 409);
+    }
 
-    // Self-registered accounts remain pending until the email address is
-    // verified. Self-registered faculty remain pending until an administrator
-    // approves the account as well. Demo and administrator-created accounts
-    // stay active.
+    // Student applications remain pending until an administrator approves them.
     $userId = bin2hex(random_bytes(16));
     $statement = $pdo->prepare(
-        'INSERT INTO users (id, email, password_hash, role_id, status, faculty_approval_status, email_verified_at)
-         VALUES (:id, :email, :password_hash, :role_id, :status, :faculty_approval_status, :email_verified_at)'
+        'INSERT INTO users (id, email, password_hash, role_id, status, student_approval_status, email_verified_at)
+         VALUES (:id, :email, :password_hash, :role_id, :status, :student_approval_status, :email_verified_at)'
     );
     $statement->execute([
         ':id' => $userId,
@@ -95,7 +104,7 @@ try {
         ':password_hash' => hashPassword((string)$input['password']),
         ':role_id' => $role,
         ':status' => 'pending',
-        ':faculty_approval_status' => $role === 'faculty' ? 'pending' : 'not_required',
+        ':student_approval_status' => 'pending',
         ':email_verified_at' => null,
     ]);
 
@@ -115,55 +124,29 @@ try {
         ':phone' => $input['phone'] ?? null,
     ]);
 
-    $verificationToken = issueEmailVerification($pdo, $userId);
-
+    logAudit('create', 'user', $userId, [], ['role_id' => 'student', 'student_approval_status' => 'pending']);
     $pdo->commit();
-
-    logAudit('create', 'user', $userId, [], [
-        'email' => $input['email'],
-        'role_id' => $role,
-        'faculty_approval_status' => $role === 'faculty' ? 'pending' : 'not_required',
-    ]);
-
-    $mailSent = false;
+    $emailSent = false;
     try {
-        sendEmailVerificationLink(
-            strtolower((string)$input['email']),
-            emailVerificationUrl($verificationToken),
-            $role
+        sendStudentRegistrationReceived(
+            $input['email'],
+            trim((string)$input['first_name'] . ' ' . (string)$input['last_name']),
+            $studentNumber
         );
-        $mailSent = true;
+        $emailSent = true;
     } catch (Throwable $mailException) {
-        // The account remains pending and the user can request a new link.
-        // Never log the token or the verification URL.
-        error_log(sprintf(
-            'Verification email failed for user %s: %s',
-            $userId,
-            $mailException->getMessage()
-        ));
+        // Preserve the application if the SMTP provider is unavailable.
+        error_log('Registration email failed for user ' . $userId . ': ' . $mailException->getMessage());
     }
-
-    $response = [
-        'message' => $role === 'faculty'
-            ? 'Faculty account created. Verify your email address; an administrator must approve the account before you can sign in.'
-            : 'Account created. Verify your email address before signing in.',
+    respond([
+        'message' => 'Student application submitted. Wait for administrator approval, then sign in with your Student ID and password.',
         'user_id' => $userId,
         'student_number' => $studentNumber,
-        'faculty_number' => $facultyNumber,
-        'approval_required' => $role === 'faculty',
-        'verification_required' => true,
-        'email_sent' => $mailSent,
-    ];
+        'approval_required' => true,
+        'verification_required' => false,
+        'email_sent' => $emailSent,
+    ], 201);
 
-    // Local debugging fallback when Mailpit is unavailable. The token is only
-    // returned to localhost in debug mode, matching the reset-code policy.
-    if (!empty($config['app']['debug'])
-        && in_array(clientIp(), ['127.0.0.1', '::1'], true)
-    ) {
-        $response['debug_verification_url'] = emailVerificationUrl($verificationToken);
-    }
-
-    respond($response, 201);
 } catch (Throwable $exception) {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();
@@ -173,6 +156,11 @@ try {
         $existing->execute([strtolower(trim((string)$input['email']))]);
         if ($existing->fetchColumn()) {
             respond(['error' => 'Email already registered', 'fields' => ['email' => 'Email already registered']], 409);
+        }
+        $existingNumber = $pdo->prepare('SELECT user_id FROM user_profiles WHERE student_number = ?');
+        $existingNumber->execute([$input['student_number']]);
+        if ($existingNumber->fetchColumn()) {
+            respond(['error' => 'Student ID already registered', 'fields' => ['student_number' => 'This Student ID is already registered.']], 409);
         }
     }
     respondServerError($exception, 'Registration failed. Please try again.');

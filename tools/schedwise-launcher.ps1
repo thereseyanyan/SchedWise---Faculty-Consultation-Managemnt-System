@@ -126,7 +126,7 @@ function Test-Backend {
 function Test-Frontend {
     try {
         $response = Invoke-WebRequest -Uri 'http://localhost:5173' -UseBasicParsing -TimeoutSec 3
-        return ($response.StatusCode -eq 200 -and $response.Content -match 'Faculty Consultation')
+        return ($response.StatusCode -eq 200 -and $response.Content -match '<title>SchedWise</title>')
     } catch {
         return $false
     }
@@ -534,8 +534,8 @@ try {
     }
 
 
-    try { $mailpitProcess = Ensure-Mailpit }
-    catch { Show-Warning "Local email testing is unavailable. $($_.Exception.Message)" }
+    # Transactional email uses the SMTP provider configured in backend/config.php.
+    # Do not download or start Mailpit automatically.
 
     if ($backendProcess -or $frontendProcess -or $mailpitProcess) {
         Save-TrackedProcesses -BackendProcess $backendProcess -FrontendProcess $frontendProcess -MailpitProcess $mailpitProcess

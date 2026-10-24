@@ -26,8 +26,7 @@ export const departmentIds: Record<string, string> = {
   "College of Arts & Sciences": "cas",
 }
 
-export const institutionalEmailPattern =
-  /@([a-z0-9-]+\.)+(edu|ac|sch|school|college|university)(\.[a-z]{2,})?$/i
+export const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export const passwordPolicyMessage =
   "Use at least 8 characters with an uppercase letter, lowercase letter, number, and special character."

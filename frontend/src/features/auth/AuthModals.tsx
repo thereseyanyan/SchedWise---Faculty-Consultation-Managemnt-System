@@ -27,8 +27,10 @@ export function AuthModals({
   const [forgotOpen, setForgotOpen] = useState(false)
   const [signupEmail, setSignupEmail] = useState("")
   const [showSignupNotice, setShowSignupNotice] = useState(false)
+  const [signupEmailSent, setSignupEmailSent] = useState(false)
 
-  const handleSignupSuccess = (email: string) => {
+  const handleSignupSuccess = (email: string, emailSent: boolean) => {
+    setSignupEmailSent(emailSent)
     setSignupEmail(email)
     setShowSignupNotice(true)
     onSwitchMode("login")
@@ -62,7 +64,8 @@ export function AuthModals({
                 />
                 {showSignupNotice ? (
                   <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
-                    Account created. Check your email to verify your account. {initialRole === "faculty" ? "Faculty accounts need administrator approval after verification." : ""}
+                    Application submitted. Your Student ID is <strong>{signupEmail}</strong>. Save it for login. Wait for administrator approval before signing in.
+                    {signupEmailSent ? " A registration confirmation email was sent to your registered address." : " Your application was saved, but the confirmation email could not be sent. Contact the administrator."}
                   </p>
                 ) : null}
               </>
@@ -70,7 +73,6 @@ export function AuthModals({
               <SignUpForm
                 onSuccess={handleSignupSuccess}
                 onLogin={() => onSwitchMode("login")}
-                initialRole={initialRole}
               />
             )}
           </div>

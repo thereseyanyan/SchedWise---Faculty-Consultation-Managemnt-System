@@ -62,10 +62,13 @@ export type FacultyDirectoryEntry = {
 };
 
 export type ManagedUser = {
+  notification_email_sent?: boolean;
   id: string;
   email: string;
   role_id: string;
   status: string;
+  must_change_password?: boolean;
+  student_approval_status?: string;
   faculty_approval_status?: string;
   email_verified_at?: string | null;
   first_name?: string;
@@ -84,6 +87,8 @@ export type User = {
   email: string;
   role_id: string;
   status: string;
+  must_change_password?: boolean;
+  student_approval_status?: string;
   faculty_approval_status?: string | null;
   first_name?: string;
   last_name?: string;
@@ -304,7 +309,7 @@ export const authApi = {
       body: JSON.stringify(userData),
     }),
 
-  login: async (credentials: { email: string; password: string }) => {
+  login: async (credentials: { email?: string; identifier?: string; password: string }) => {
     const result = await request<{ user: User; csrf_token: string }>(
       "/auth/login.php",
       {
@@ -434,16 +439,16 @@ export const usersApi = {
       body: JSON.stringify(data),
     }),
 
-  approveFaculty: (id: string) =>
+  approveStudent: (id: string) =>
     request<ManagedUser>(`/users/index.php?id=${encodeURIComponent(id)}`, {
       method: "PUT",
-      body: JSON.stringify({ faculty_approval_action: "approve" }),
+      body: JSON.stringify({ student_approval_action: "approve" }),
     }),
 
-  rejectFaculty: (id: string) =>
+  rejectStudent: (id: string) =>
     request<ManagedUser>(`/users/index.php?id=${encodeURIComponent(id)}`, {
       method: "PUT",
-      body: JSON.stringify({ faculty_approval_action: "reject" }),
+      body: JSON.stringify({ student_approval_action: "reject" }),
     }),
 };
 

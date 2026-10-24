@@ -9,7 +9,6 @@ import {
   departmentIds,
   departments,
   errorMessage,
-  institutionalEmailPattern,
   isStrongPassword,
   passwordPolicyMessage,
 } from "../../shared"
@@ -33,11 +32,7 @@ export function LoginForm({ onSuccess, onForgot, onRegister, initialEmail = "" }
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     if (!email.trim() || !password.trim()) {
-      setError("Enter your email address and password.")
-      return
-    }
-    if (!/^\S+@\S+\.\S+$/.test(email.trim())) {
-      setError("Enter a valid email address.")
+      setError("Enter your Student ID or email and password.")
       return
     }
     setLoading(true)
@@ -45,16 +40,16 @@ export function LoginForm({ onSuccess, onForgot, onRegister, initialEmail = "" }
     setNotice("")
     setNeedsVerification(false)
     try {
-      const { user } = await authApi.login({ email: email.trim(), password })
+      const { user } = await authApi.login({ identifier: email.trim(), password })
       onSuccess(user)
     } catch (err) {
       if (err instanceof ApiError && err.code === "email_unverified") {
         setNeedsVerification(true)
         setError("Your account needs email verification before you can sign in.")
-      } else if (err instanceof ApiError && err.code === "faculty_approval_pending") {
-        setError("Your email is verified, but your faculty account is awaiting administrator approval.")
-      } else if (err instanceof ApiError && err.code === "faculty_approval_rejected") {
-        setError("Your faculty account registration was not approved. Contact the administrator for details.")
+      } else if (err instanceof ApiError && err.code === "student_approval_pending") {
+        setError("Your student application is awaiting administrator approval.")
+      } else if (err instanceof ApiError && err.code === "student_approval_rejected") {
+        setError("Your student application was not approved. Contact the administrator for details.")
       } else {
         setError(errorMessage(err, "Login failed. Please check your credentials."))
       }
@@ -90,18 +85,18 @@ export function LoginForm({ onSuccess, onForgot, onRegister, initialEmail = "" }
       </div>
       <div className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-schedwise-navy">Email</label>
+          <label className="block text-sm font-medium text-schedwise-navy">Student ID / Email</label>
           <InputTag
             type="text"
-            inputMode="email"
+            inputMode="text"
             value={email}
             onChange={(e) => {
               setEmail(e.target.value)
               setError("")
               setNeedsVerification(false)
             }}
-            placeholder="Enter your email"
-            autoComplete="email"
+            placeholder="Student ID or email"
+            autoComplete="username"
             className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-schedwise-purple focus:outline-none focus:ring-2 focus:ring-schedwise-purple/20"
           />
         </div>

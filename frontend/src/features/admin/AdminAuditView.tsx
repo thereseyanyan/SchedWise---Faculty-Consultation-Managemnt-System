@@ -18,10 +18,10 @@ import {
 } from "../../shared"
 
 export const auditActionTone = (action: string): "success" | "warning" | "danger" => {
-  if (["create", "login", "approve", "approve_faculty", "verify_email", "password_reset", "change_password"].includes(action)) {
+  if (["create", "login", "approve", "approve_student", "approve_faculty", "verify_email", "password_reset", "change_password"].includes(action)) {
     return "success"
   }
-  if (["delete", "reject_faculty", "failed_login", "login_unverified", "login_pending_faculty_approval",
+  if (["delete", "reject_student", "reject_faculty", "failed_login", "login_unverified", "login_pending_faculty_approval",
     "login_rejected_faculty", "failed_login_inactive", "change_password_failed"].includes(action)) {
     return "danger"
   }

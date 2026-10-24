@@ -222,7 +222,7 @@ export function PortalShell({
                 onClick={() => onNavigate(label)}
                 aria-label={
                   badge
-                    ? `${label}, ${badge} faculty ${badge === 1 ? "approval" : "approvals"} pending`
+                    ? `${label}, ${badge} student ${badge === 1 ? "application" : "applications"} pending`
                     : undefined
                 }
                 className={`shrink-0 gap-2 rounded-2xl border px-4 py-2.5 text-sm font-medium ${
@@ -235,7 +235,7 @@ export function PortalShell({
                 {label}
                 {badge ? (
                   <span
-                    title={`${badge} faculty ${badge === 1 ? "approval" : "approvals"} pending`}
+                    title={`${badge} student ${badge === 1 ? "application" : "applications"} pending`}
                     className={`ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
                       active === label
                         ? "bg-white/20 text-white"

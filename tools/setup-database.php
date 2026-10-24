@@ -134,6 +134,15 @@ function ensureMigrations(PDO $pdo): void
         // workflow existed. Keep them usable.
         $pdo->exec("UPDATE users SET faculty_approval_status = 'approved' WHERE role_id = 'faculty'");
     }
+    if (!$pdo->query("SHOW COLUMNS FROM users LIKE 'student_approval_status'")->fetch()) {
+        $pdo->exec("ALTER TABLE users ADD COLUMN student_approval_status ENUM('not_required', 'pending', 'approved', 'rejected') NOT NULL DEFAULT 'not_required'");
+        // Preserve existing active students; pending applications now need approval.
+        $pdo->exec("UPDATE users SET student_approval_status = CASE WHEN status = 'pending' THEN 'pending' ELSE 'approved' END WHERE role_id = 'student'");
+    }
+    if (!$pdo->query("SHOW COLUMNS FROM users LIKE 'must_change_password'")->fetch()) {
+        $pdo->exec("ALTER TABLE users ADD COLUMN must_change_password TINYINT(1) NOT NULL DEFAULT 0");
+        // Existing accounts are preserved; new admin-created faculty require a password change.
+    }
     require_once __DIR__ . '/../backend/shared/validation.php';
     $accounts = $pdo->query("SELECT u.id, u.role_id, up.student_number, up.faculty_number FROM users u JOIN user_profiles up ON up.user_id = u.id WHERE u.role_id IN ('student', 'faculty') ORDER BY u.created_at, u.id")->fetchAll();
     $seen = [];
@@ -141,8 +150,8 @@ function ensureMigrations(PDO $pdo): void
         $field = $account['role_id'] === 'student' ? 'student_number' : 'faculty_number';
         $prefix = $account['role_id'] === 'student' ? 'STU-' : 'FAC-';
         $value = strtoupper(trim((string)$account[$field]));
-        if (preg_match('/^' . $prefix . '\\d{4,}$/', $value) && !isset($seen[$value])) {
-            $seen[$value] = true;
+        if (($account['role_id'] === 'student' ? validateStudentNumber($value) : preg_match('/^' . $prefix . '\\d{4,}$/', $value)) && !isset($seen[$field . ":" . $value])) {
+            $seen[$field . ":" . $value] = true;
             continue;
         }
         try {
@@ -150,7 +159,7 @@ function ensureMigrations(PDO $pdo): void
             $value = allocateAccountNumber($pdo, $account['role_id']);
             $pdo->prepare("UPDATE user_profiles SET {$field} = ? WHERE user_id = ?")->execute([$value, $account['id']]);
             $pdo->commit();
-            $seen[$value] = true;
+            $seen[$field . ":" . $value] = true;
         } catch (Throwable $exception) {
             if ($pdo->inTransaction()) $pdo->rollBack();
             throw $exception;

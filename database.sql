@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash VARCHAR(255) NOT NULL,
   role_id VARCHAR(32) NOT NULL,
   status ENUM('pending', 'active', 'suspended', 'disabled') NOT NULL DEFAULT 'pending',
+  student_approval_status ENUM('not_required', 'pending', 'approved', 'rejected') NOT NULL DEFAULT 'not_required',
+  must_change_password TINYINT(1) NOT NULL DEFAULT 0,
   faculty_approval_status ENUM('not_required', 'pending', 'approved', 'rejected') NOT NULL DEFAULT 'not_required',
   email_verified_at TIMESTAMP NULL,
   last_login_at TIMESTAMP NULL,

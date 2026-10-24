@@ -3,7 +3,7 @@ import { Button } from "../../shared"
 
 export function AdminGettingStarted({ onManageAccounts }: { onManageAccounts: () => void }) {
   const steps = [
-    { icon: UsersRound, title: "Add accounts", text: "Create faculty and student accounts, or share the public registration page." },
+    { icon: UsersRound, title: "Add accounts", text: "Create faculty accounts and share student registration. Review student applications here." },
     { icon: GraduationCap, title: "Set availability", text: "Faculty add recurring consultation hours and date-specific overrides." },
     { icon: CalendarDays, title: "Start booking", text: "Students book available slots, then faculty review and confirm requests." },
   ]

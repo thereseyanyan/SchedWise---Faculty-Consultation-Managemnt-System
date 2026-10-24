@@ -13,6 +13,7 @@ const PHP =
   process.env.SCHEDWISE_PHP ||
   (existsSync("C:\\xampp\\php\\php.exe") ? "C:\\xampp\\php\\php.exe" : "php");
 
+const studentNumbers = new Map([["juan.delacruz@schedwise.edu", "STU-0001"]]);
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 class ApiClient {
@@ -20,6 +21,7 @@ class ApiClient {
   csrf = "";
 
   async request(route, { method = "GET", body, csrf = true } = {}) {
+    if (route === "/auth/register.php" && body?.role_id === "student" && body.student_number === undefined) body = { ...body, student_number: `TEST-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
     const headers = {};
     if (body !== undefined) {
       headers["Content-Type"] = "application/json";
@@ -65,13 +67,14 @@ class ApiClient {
       payload = null;
     }
 
+    if (route === "/auth/register.php" && response.status === 201) studentNumbers.set(body.email, payload.data.student_number);
     return { status: response.status, payload, text };
   }
 
   async login(email, password) {
     const response = await this.request("/auth/login.php", {
       method: "POST",
-      body: { email, password },
+      body: { identifier: studentNumbers.get(email) || email, password },
       csrf: false,
     });
     if (response.status === 200 && response.payload?.data?.csrf_token) {
@@ -140,9 +143,13 @@ async function findVerificationLink(email) {
 }
 
 test("SchedWise API regression suite", async (t) => {
+  // Run before requests, browser startup, or cleanup: direct test invocations must also be safe.
+  const fixtureCheck = spawnSync(PHP, [path.join(ROOT, "tests", "check-mail-fixture.php")], { cwd: ROOT, encoding: "utf8" });
+  assert.equal(fixtureCheck.status, 0, fixtureCheck.stderr || fixtureCheck.stdout || "SMTP fixture safety check failed");
+
   const runId = `${Date.now()}.${Math.random().toString(36).slice(2, 8)}`;
   const emailPrefix = `e2e.${runId}`;
-  const email = `${emailPrefix}@schedwise.edu`;
+  const email = `${emailPrefix}@gmail.com`;
   const initialPassword = "Test1234!";
   const newPassword = "NewTest1234!";
   const finalPassword = "FinalTest1234!";
@@ -306,7 +313,7 @@ test("SchedWise API regression suite", async (t) => {
       assert.ok(badDepartment.payload?.fields?.department_id);
     });
 
-    await t.test("verified registration, forgot-password email, and reset", async () => {
+    await t.test("student registration requires admin approval and supports password recovery", async () => {
       const registration = await new ApiClient().request("/auth/register.php", {
         method: "POST",
         csrf: false,
@@ -321,58 +328,23 @@ test("SchedWise API regression suite", async (t) => {
         },
       });
       assert.equal(registration.status, 201, registration.text);
-      assert.equal(registration.payload?.data?.verification_required, true);
-      assert.equal(registration.payload?.data?.email_sent, true);
-
+      assert.equal(registration.payload.data.verification_required, false);
       const pendingLogin = await new ApiClient().login(email, initialPassword);
       assert.equal(pendingLogin.status, 403);
-      assert.equal(pendingLogin.payload?.code, "email_unverified");
-
-      const resend = await new ApiClient().request(
-        "/auth/resend-verification.php",
-        {
-          method: "POST",
-          csrf: false,
-          body: { email },
-        },
-      );
-      assert.equal(resend.status, 200, resend.text);
-      assert.match(resend.payload?.data?.message || "", /verification link/i);
-
-      const verificationLink = await findVerificationLink(email);
-      const verificationToken = new URL(verificationLink).searchParams.get(
-        "verify_token",
-      );
-      assert.ok(verificationToken);
-
-      const verified = await new ApiClient().request("/auth/verify-email.php", {
-        method: "POST",
-        csrf: false,
-        body: { token: verificationToken },
-      });
-      assert.equal(verified.status, 200, verified.text);
-
-      const reusedVerification = await new ApiClient().request(
-        "/auth/verify-email.php",
-        {
-          method: "POST",
-          csrf: false,
-          body: { token: verificationToken },
-        },
-      );
-      assert.equal(reusedVerification.status, 200);
-      assert.match(reusedVerification.payload?.data?.message || "", /already verified/i);
-
-      const invalidVerification = await new ApiClient().request(
-        "/auth/verify-email.php",
-        {
-          method: "POST",
-          csrf: false,
-          body: { token: "0".repeat(64) },
-        },
-      );
-      assert.equal(invalidVerification.status, 400);
-
+      assert.equal(pendingLogin.payload.code, "student_approval_pending");
+      const admin = new ApiClient();
+      assert.equal((await admin.login("admin@schedwise.edu", "Admin123!")).status, 200);
+      const route = `/users/index.php?id=${registration.payload.data.user_id}`;
+      assert.equal((await admin.request(route, { method: "PUT", body: { status: "active" } })).status, 409);
+      const approved = await admin.request(route, { method: "PUT", body: { student_approval_action: "approve" } });
+      assert.equal(approved.status, 200, approved.text);
+      assert.equal(approved.payload.data.notification_email_sent, true);
+      const approvalMessages = await matchingMessages(email, /student account has been approved/i);
+      assert.equal(approvalMessages.length, 1);
+      assert.match(await messageBody(approvalMessages[0]), /activated and ready for login/i);
+      assert.equal((await admin.request(route, { method: "PUT", body: { student_approval_action: "approve" } })).status, 409);
+      const emailLogin = await new ApiClient().request("/auth/login.php", { method: "POST", body: { identifier: email, password: initialPassword } });
+      assert.equal(emailLogin.status, 200, emailLogin.text);
       const afterVerification = await new ApiClient().login(email, initialPassword);
       assert.equal(afterVerification.status, 200, afterVerification.text);
       assert.equal(afterVerification.payload?.data?.user?.role_id, "student");
@@ -407,133 +379,46 @@ test("SchedWise API regression suite", async (t) => {
       assert.equal(reused.status, 400);
     });
 
-    await t.test("faculty self-registration is unique, verified, and admin-approved", async () => {
-      const facultyEmail = `${emailPrefix}.self-faculty@schedwise.edu`;
-      const rejectedEmail = `${emailPrefix}.rejected-faculty@schedwise.edu`;
-
-      const registerFaculty = (facultyAddress) =>
-        new ApiClient().request("/auth/register.php", {
-          method: "POST",
-          csrf: false,
-          body: {
-            email: facultyAddress,
-            password: initialPassword,
-            first_name: "Automated",
-            last_name: "Faculty",
-            role_id: "faculty",
-            department_id: "ccs",
-          },
-        });
-
-      const register = await registerFaculty(facultyEmail);
-      assert.equal(register.status, 201, register.text);
-      assert.equal(register.payload?.data?.approval_required, true);
-      assert.equal(register.payload?.data?.student_number, null);
-      assert.match(register.payload?.data?.faculty_number || "", /^FAC-\d{4,}$/);
-      const facultyNumber = register.payload.data.faculty_number;
-
-      const unverifiedLogin = await new ApiClient().login(facultyEmail, initialPassword);
-      assert.equal(unverifiedLogin.status, 403);
-      assert.equal(unverifiedLogin.payload?.code, "email_unverified");
-
+    await t.test("faculty creation is admin-only and first login is restricted; students may be rejected", async () => {
       const admin = new ApiClient();
       assert.equal((await admin.login("admin@schedwise.edu", "Admin123!")).status, 200);
-      const pendingFaculty = async () => {
-        const listed = await admin.request("/users/index.php?role_id=faculty&status=pending");
-        assert.equal(listed.status, 200, listed.text);
-        return listed.payload.data.find((row) => row.email === facultyEmail);
-      };
-      const pending = await pendingFaculty();
-      assert.ok(pending, "Self-registered faculty was not listed as pending");
-      assert.equal(pending.faculty_approval_status, "pending");
-      assert.equal(pending.email_verified_at, null);
-
-      const earlyApproval = await admin.request(
-        `/users/index.php?id=${encodeURIComponent(pending.id)}`,
-        { method: "PUT", body: { faculty_approval_action: "approve" } },
-      );
-      assert.equal(earlyApproval.status, 400, earlyApproval.text);
-      assert.equal(earlyApproval.payload?.code, "faculty_email_unverified");
-
-      const verificationLink = await findVerificationLink(facultyEmail);
-      const verificationToken = new URL(verificationLink).searchParams.get("verify_token");
-      assert.ok(verificationToken);
-      const verified = await new ApiClient().request("/auth/verify-email.php", {
-        method: "POST",
-        csrf: false,
-        body: { token: verificationToken },
-      });
-      assert.equal(verified.status, 200, verified.text);
-      assert.match(verified.payload?.data?.message || "", /awaiting administrator approval/i);
-
-      const reusedVerification = await new ApiClient().request("/auth/verify-email.php", {
-        method: "POST",
-        csrf: false,
-        body: { token: verificationToken },
-      });
-      assert.equal(reusedVerification.status, 200, reusedVerification.text);
-      assert.match(reusedVerification.payload?.data?.message || "", /awaiting administrator approval/i);
-
-      const awaitingLogin = await new ApiClient().login(facultyEmail, initialPassword);
-      assert.equal(awaitingLogin.status, 403);
-      assert.equal(awaitingLogin.payload?.code, "faculty_approval_pending");
-
-      const verifiedPending = await pendingFaculty();
-      assert.ok(verifiedPending?.email_verified_at);
-
-      const approved = await admin.request(
-        `/users/index.php?id=${encodeURIComponent(verifiedPending.id)}`,
-        { method: "PUT", body: { faculty_approval_action: "approve" } },
-      );
-      assert.equal(approved.status, 200, approved.text);
-      assert.equal(approved.payload?.data?.status, "active");
-      assert.equal(approved.payload?.data?.faculty_approval_status, "approved");
-      assert.ok(
-        (await matchingMessages(facultyEmail, /faculty account has been approved/i)).length > 0,
-        "Approval decision email was not delivered to Mailpit",
-      );
-
-      const approvedLogin = await new ApiClient().login(facultyEmail, initialPassword);
-      assert.equal(approvedLogin.status, 200, approvedLogin.text);
-      assert.equal(approvedLogin.payload?.data?.user?.role_id, "faculty");
-      assert.equal(approvedLogin.payload?.data?.user?.faculty_number, facultyNumber);
-
-      const rejectedRegistration = await registerFaculty(rejectedEmail);
-      assert.equal(rejectedRegistration.status, 201, rejectedRegistration.text);
-      assert.notEqual(
-        rejectedRegistration.payload?.data?.faculty_number,
-        facultyNumber,
-        "Faculty registrations must receive unique IDs.",
-      );
-
-      const rejectedLink = await findVerificationLink(rejectedEmail);
-      const rejectedToken = new URL(rejectedLink).searchParams.get("verify_token");
-      assert.ok(rejectedToken);
-      assert.equal((await new ApiClient().request("/auth/verify-email.php", {
-        method: "POST",
-        csrf: false,
-        body: { token: rejectedToken },
-      })).status, 200);
-
-      const rejectedList = await admin.request("/users/index.php?role_id=faculty&status=pending");
-      const rejectedUser = rejectedList.payload.data.find((row) => row.email === rejectedEmail);
-      assert.ok(rejectedUser);
-
-      const rejected = await admin.request(
-        `/users/index.php?id=${encodeURIComponent(rejectedUser.id)}`,
-        { method: "PUT", body: { faculty_approval_action: "reject" } },
-      );
-      assert.equal(rejected.status, 200, rejected.text);
-      assert.equal(rejected.payload?.data?.status, "disabled");
-      assert.equal(rejected.payload?.data?.faculty_approval_status, "rejected");
-      assert.ok(
-        (await matchingMessages(rejectedEmail, /faculty registration was not approved/i)).length > 0,
-        "Rejection decision email was not delivered to Mailpit",
-      );
-
-      const rejectedLogin = await new ApiClient().login(rejectedEmail, initialPassword);
-      assert.equal(rejectedLogin.status, 403);
-      assert.equal(rejectedLogin.payload?.code, "faculty_approval_rejected");
+      const profile = { email: `${emailPrefix}.first-faculty@schedwise.edu`, password: initialPassword, first_name: "Test", last_name: "Faculty", role_id: "faculty" };
+      assert.equal((await new ApiClient().request("/auth/register.php", { method: "POST", body: profile })).status, 403);
+      assert.equal((await admin.request("/users/index.php", { method: "POST", body: { ...profile, role_id: "student" } })).status, 403);
+      assert.equal((await new ApiClient().request("/users/index.php", { method: "POST", body: profile })).status, 403);
+      const created = await admin.request("/users/index.php", { method: "POST", body: profile });
+      assert.equal(created.status, 201, created.text);
+      const faculty = new ApiClient();
+      const first = await faculty.login(profile.email, initialPassword);
+      assert.equal(first.status, 200, first.text);
+      assert.equal(first.payload.data.user.must_change_password, true);
+      assert.equal((await faculty.request("/auth/me.php")).payload.data.user.must_change_password, true);
+      for (const route of ["/appointments/index.php", "/faculty/availability.php", "/users/index.php"]) {
+        const blocked = await faculty.request(route);
+        assert.equal(blocked.status, 403, blocked.text);
+        assert.equal(blocked.payload.code, "password_change_required");
+      }
+      const change = body => faculty.request("/auth/change-password.php", { method: "POST", body });
+      assert.equal((await change({ current_password: "wrong", new_password: newPassword })).status, 400);
+      assert.equal((await change({ current_password: initialPassword, new_password: initialPassword })).status, 400);
+      assert.equal((await change({ current_password: initialPassword, new_password: "weak" })).status, 400);
+      const changed = await change({ current_password: initialPassword, new_password: newPassword });
+      assert.equal(changed.status, 200, changed.text);
+      faculty.csrf = changed.payload.data.csrf_token;
+      assert.equal((await faculty.request("/auth/me.php")).payload.data.user.must_change_password, false);
+      assert.equal((await faculty.request("/appointments/index.php")).status, 200);
+      assert.equal((await new ApiClient().login(profile.email, initialPassword)).status, 401);
+      assert.equal((await new ApiClient().login(profile.email, newPassword)).payload.data.user.must_change_password, false);
+      const application = await new ApiClient().request("/auth/register.php", { method: "POST", body: { ...profile, email: `${emailPrefix}.rejected@schedwise.edu`, role_id: "student" } });
+      assert.equal(application.status, 201, application.text);
+      const route = `/users/index.php?id=${application.payload.data.user_id}`;
+      const student = new ApiClient();
+      assert.equal((await student.request(route, { method: "PUT", body: { student_approval_action: "approve" } })).status, 403);
+      assert.equal((await admin.request(route, { method: "PUT", body: { student_approval_action: "reject" } })).status, 200);
+      assert.equal((await admin.request(route, { method: "PUT", body: { status: "active" } })).status, 409);
+      const rejected = await student.login(application.payload.data.student_number, initialPassword);
+      assert.equal(rejected.status, 403);
+      assert.equal(rejected.payload.code, "student_approval_rejected");
     });
 
     await t.test("student can book an available slot and cannot spoof another student", async () => {
@@ -710,14 +595,13 @@ test("SchedWise API regression suite", async (t) => {
       assert.equal(account.payload.data.student_number, null);
       const faculty = new ApiClient();
       const idLogin = await faculty.login(account.payload.data.faculty_number, initialPassword);
-      assert.equal(idLogin.status, 400, idLogin.text);
-      assert.ok(idLogin.payload.fields.email);
+      assert.equal(idLogin.status, 401, idLogin.text);
       assert.equal((await faculty.login(profile.email, initialPassword)).status, 200);
       const student = new ApiClient();
       const studentLogin = await student.login(email, finalPassword);
       assert.equal(studentLogin.status, 200, studentLogin.text);
-      assert.match(studentLogin.payload.data.user.student_number, /^STU-\d{4,}$/);
-      assert.equal((await new ApiClient().login(studentLogin.payload.data.user.student_number, finalPassword)).status, 400);
+      assert.match(studentLogin.payload.data.user.student_number, /^TEST-/);
+      assert.equal((await new ApiClient().login(studentLogin.payload.data.user.student_number, finalPassword)).status, 200);
       const duplicateEmail = await admin.request('/users/index.php', { method: 'POST', body: profile });
       assert.equal(duplicateEmail.status, 409);
       assert.ok(duplicateEmail.payload.fields.email);
@@ -813,6 +697,9 @@ test("SchedWise API regression suite", async (t) => {
       assert.equal(rescheduleRequest.payload?.data?.status, 'reschedule_requested');
       const otherFaculty = new ApiClient();
       assert.equal((await otherFaculty.login(`${emailPrefix}.other-slots@schedwise.edu`, initialPassword)).status, 200);
+      const unlocked = await otherFaculty.request('/auth/change-password.php', { method: 'POST', body: { current_password: initialPassword, new_password: newPassword } });
+      assert.equal(unlocked.status, 200, unlocked.text);
+      otherFaculty.csrf = unlocked.payload.data.csrf_token;
       const approvedReschedule = await otherFaculty.request(`/appointments/approve.php?id=${differentFaculty.payload.data.id}`, { method: 'PUT' });
       assert.equal(approvedReschedule.status, 200, approvedReschedule.text);
       assert.equal(approvedReschedule.payload?.data?.status, 'confirmed');
@@ -826,6 +713,33 @@ test("SchedWise API regression suite", async (t) => {
       const history = await student.request('/appointments/index.php');
       assert.equal(history.payload.data.some((a) => a.id === booking.payload.data.id), true);
     });
+    await t.test("personal email domains and supplied Student IDs are validated and unique", async () => {
+      cleanup(); // Previous fixture checks are complete; reset their registration rate counters.
+      const profile = { first_name: "Personal", last_name: "Email", password: initialPassword, role_id: "student", department_id: "ccs" };
+      const register = body => new ApiClient().request("/auth/register.php", { method: "POST", body: { ...profile, ...body } });
+      const firstId = `00-${runId}-1`;
+      for (const [index, domain] of ["gmail.com", "yahoo.com", "outlook.com"].entries()) {
+        const student_number = index === 0 ? firstId : `00-${runId}-${index + 1}`;
+        const email = `${emailPrefix}.personal${index}@${domain}`;
+        const result = await register({ email, student_number });
+        assert.equal(result.status, 201, result.text);
+        assert.equal(result.payload.data.student_number, student_number.toUpperCase());
+        assert.equal((await new ApiClient().login(email, initialPassword)).payload.code, "student_approval_pending");
+      }
+      const migration = spawnSync(PHP, [path.join(ROOT, "tools", "setup-database.php")], { cwd: ROOT, encoding: "utf8" });
+      assert.equal(migration.status, 0, migration.stderr || migration.stdout);
+      const preserved = await new ApiClient().login(firstId, initialPassword);
+      assert.equal(preserved.payload.code, "student_approval_pending", "Migration must preserve supplied Student IDs and leading zeroes");
+      for (const body of [
+        { email: "invalid-email", student_number: `00-${runId}-bad` },
+        { email: `${emailPrefix}.missing@gmail.com`, student_number: "" },
+        { email: `${emailPrefix}.bad-id@gmail.com`, student_number: "invalid id!" },
+      ]) assert.equal((await register(body)).status, 400);
+      const duplicate = await register({ email: `${emailPrefix}.duplicate-id@gmail.com`, student_number: firstId.toLowerCase() });
+      assert.equal(duplicate.status, 409, duplicate.text);
+      assert.ok(duplicate.payload.fields.student_number);
+    });
+
     await t.test('appointment transitions and reschedule guard rails', async () => {
       const admin = new ApiClient();
       assert.equal((await admin.login('admin@schedwise.edu', 'Admin123!')).status, 200);
@@ -834,10 +748,9 @@ test("SchedWise API regression suite", async (t) => {
       const studentEmail = `${emailPrefix}.transitions-student@schedwise.edu`;
       const otherEmail = `${emailPrefix}.transitions-other@schedwise.edu`;
       const createUser = async (body) => {
-        const response = await admin.request('/users/index.php', { method: 'POST', body: {
-          password: initialPassword, status: 'active', ...body,
-        } });
+        const response = await admin.request(body.role_id === 'student' ? '/auth/register.php' : '/users/index.php', { method: 'POST', body: { password: initialPassword, ...body } });
         assert.equal(response.status, 201, response.text);
+        if (body.role_id === 'student') assert.equal((await admin.request(`/users/index.php?id=${response.payload.data.user_id}`, { method: 'PUT', body: { student_approval_action: 'approve' } })).status, 200);
         return response.payload.data.user_id;
       };
       const facultyId = await createUser({
@@ -852,6 +765,9 @@ test("SchedWise API regression suite", async (t) => {
 
       const faculty = new ApiClient();
       assert.equal((await faculty.login(facultyEmail, initialPassword)).status, 200);
+      const unlock = await faculty.request('/auth/change-password.php', { method: 'POST', body: { current_password: initialPassword, new_password: newPassword } });
+      assert.equal(unlock.status, 200, unlock.text);
+      faculty.csrf = unlock.payload.data.csrf_token;
       const student = new ApiClient();
       assert.equal((await student.login(studentEmail, initialPassword)).status, 200);
       const other = new ApiClient();

@@ -16,6 +16,8 @@ respond([
         'email' => $user['email'],
         'role_id' => $user['role_id'],
         'status' => $user['status'],
+        'must_change_password' => (bool)$user['must_change_password'],
+        'student_approval_status' => $user['student_approval_status'],
         'faculty_approval_status' => $user['faculty_approval_status'] ?? null,
         'first_name' => $user['first_name'] ?? null,
         'last_name' => $user['last_name'] ?? null,

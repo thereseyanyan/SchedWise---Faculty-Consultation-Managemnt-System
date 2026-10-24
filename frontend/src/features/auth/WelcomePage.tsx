@@ -128,13 +128,14 @@ export function WelcomePage({ onSignUp, onLogin }: WelcomePageProps) {
                 >
                   {selectedRole ? (
                     <div className="flex flex-col items-center gap-3">
+                      {selectedRole === "faculty" && <p className="text-sm text-schedwise-body">Faculty accounts are created by your administrator. Sign in with the email and initial password provided.</p>}
                       <div className="flex flex-col items-center gap-3 sm:flex-row">
-                        <Button
-                          onClick={() => onSignUp(selectedRole)}
+                        {selectedRole === "student" && <Button
+                          onClick={() => onSignUp("student")}
                           className="w-full rounded-[999px] bg-schedwise-purple px-8 py-3 text-sm font-semibold text-white shadow-schedwise transition hover:bg-purple-700 focus-visible:ring-2 focus-visible:ring-schedwise-purple sm:w-auto"
                         >
-                          {selectedRole === "student" ? "Sign Up as a Student" : "Sign Up as Faculty"}
-                        </Button>
+                          Sign Up as a Student
+                        </Button>}
                         <Button
                           onClick={onLogin}
                           className="w-full rounded-[999px] border border-schedwise-purple/70 px-8 py-3 text-sm font-semibold text-schedwise-purple transition hover:bg-schedwise-lavender-100 focus-visible:ring-2 focus-visible:ring-schedwise-purple sm:w-auto"

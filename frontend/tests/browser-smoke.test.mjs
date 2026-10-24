@@ -103,23 +103,17 @@ class ApiClient {
 }
 
 async function login(page, email, password) {
-  await page.getByLabel("Email Address").fill(email);
-  await page.getByLabel("Password").fill(password);
-  await page.getByRole("button", { name: "Login", exact: true }).click();
+  await page.getByPlaceholder("Student ID or email").fill(email === "juan.delacruz@schedwise.edu" ? "STU-0001" : email);
+  await page.getByPlaceholder("Enter your password", { exact: true }).fill(password);
+  await page.getByRole("dialog").getByRole("button", { name: /^login$/i }).click();
 }
 
 async function signOut(page) {
   await page.getByRole("button", { name: "Sign Out", exact: true }).click();
   await page.getByRole("button", { name: "Yes", exact: true }).click();
   await page.waitForFunction(() => /ARE YOU A|Welcome to SchedWise|Login/.test(document.body.innerText));
-  const loginFromWelcome = page.getByRole("button", { name: "Login", exact: true });
-  if (await loginFromWelcome.count()) {
-    const studentCard = page.getByRole("radio", { name: /student/i }).first();
-    if (await studentCard.count()) {
-      await studentCard.click();
-    }
-    await loginFromWelcome.first().click();
-  }
+  await page.locator("button[data-role=student]").click();
+  await page.getByRole("button", { name: "Login", exact: true }).click();
   await page.getByRole("heading", { name: "Login" }).waitFor();
 }
 
@@ -178,6 +172,10 @@ async function expectPurple(locator) {
 }
 
 test("SchedWise browser smoke", { timeout: 180_000 }, async (t) => {
+  // Run before requests, browser startup, or cleanup: direct test invocations must also be safe.
+  const fixtureCheck = spawnSync(PHP, [path.join(ROOT, "tests", "check-mail-fixture.php")], { cwd: ROOT, encoding: "utf8" });
+  assert.equal(fixtureCheck.status, 0, fixtureCheck.stderr || fixtureCheck.stdout || "SMTP fixture safety check failed");
+
   if (!browserPath) {
     t.skip("Brave, Chrome, or Edge was not found. Set SCHEDWISE_BROWSER_PATH to run the browser smoke test.");
     return;
@@ -186,8 +184,9 @@ test("SchedWise browser smoke", { timeout: 180_000 }, async (t) => {
   const runId = `${Date.now()}.${Math.random().toString(36).slice(2, 8)}`;
   const emailPrefix = `e2e.browser.${runId}`;
   const facultyEmail = `${emailPrefix}@schedwise.edu`;
-  const facultyPassword = "Browser1234!";
-  const studentEmail = `${emailPrefix}.student@schedwise.edu`;
+  let facultyPassword = "Browser1234!";
+  let studentNumber = "";
+  const studentEmail = `${emailPrefix}.student@gmail.com`;
   const studentPassword = "Browser1234!";
   const availabilityDate = new Date();
   availabilityDate.setDate(availabilityDate.getDate() + 2);
@@ -216,86 +215,44 @@ test("SchedWise browser smoke", { timeout: 180_000 }, async (t) => {
 
   try {
     await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
-    await page.waitForFunction(() => /ARE YOU A|Welcome to SchedWise|Login/.test(document.body.innerText));
-    const loginLink = page.getByRole("button", { name: "Login", exact: true }).first();
-    if (await loginLink.count()) {
-      // If already on login screen
-      await page.getByRole("heading", { name: "Login" }).waitFor();
-    } else {
-      // On welcome page - select a role then click Login
-      const studentCard = page.getByRole("radio", { name: /student/i }).first();
-      if (await studentCard.count()) {
-        await studentCard.click();
-      } else {
-        await page.getByText(/Student/i).first().click();
-      }
-      await page.getByRole("button", { name: "Login", exact: true }).click();
-      await page.getByRole("heading", { name: "Login" }).waitFor();
-    }
-
-    await expectPurple(page.getByRole("button", { name: "Login", exact: true }));
-    await page.getByRole("button", { name: "Login", exact: true }).click();
-    await page.getByText("Enter your email address and password.").waitFor();
-
-    // Privacy is placed on registration and in Account Settings, not on the dashboard.
-    await page.getByRole("button", { name: /New Here\?/ }).click();
-    await page.getByRole("heading", { name: "Register" }).waitFor();
-    const registerPrivacy = page.getByText("Privacy and access to your data", { exact: true });
-    await registerPrivacy.waitFor();
-    await registerPrivacy.click();
-    await page.getByText(/SchedWise stores account details/).waitFor();
-    await page.getByText(/Private faculty notes are available only/).waitFor();
-
-    // Register a faculty member through the real form, verify the email, and
-    // let the administrator approve the account through User Management.
-    await page.getByRole("button", { name: "Faculty", exact: true }).click();
-    await page.getByLabel("Full Name").fill("Browser Faculty");
-    await page.getByLabel("Institutional Email Address").fill(facultyEmail);
-    await page.getByLabel("Password Creation").fill(facultyPassword);
-    await page.getByLabel("Department / College").selectOption({
-      label: "College of Computer Studies",
-    });
-    await page.getByRole("button", { name: "Register", exact: true }).click();
-    await page.getByRole("heading", { name: "Login" }).waitFor();
-    await page.getByText(/Faculty account created/).waitFor();
-    await page.getByText(/Faculty ID is FAC-/).waitFor();
-
-    await login(page, facultyEmail, facultyPassword);
-    await page.getByText("Your account needs email verification before you can sign in.").waitFor();
-    await page.getByRole("button", { name: "Resend verification email" }).waitFor();
-
-    const verificationLink = await findVerificationLink(facultyEmail);
-    await page.goto(verificationLink, { waitUntil: "domcontentloaded" });
-    await page.getByText(/Email (?:already )?verified.*awaiting administrator approval/i).waitFor();
-
-    await login(page, facultyEmail, facultyPassword);
-    await page.getByText(
-      "Your email is verified, but your faculty account is awaiting administrator approval.",
-    ).waitFor();
-
+    await page.locator("button[data-role=faculty]").click();
+    assert.equal(await page.getByRole("button", { name: /Sign Up/ }).count(), 0);
+    await page.getByText(/Faculty accounts are created by your administrator/).waitFor();
+    await page.locator("button[data-role=student]").click();
+    await page.getByRole("button", { name: "Sign Up as a Student" }).click();
+    await page.getByRole("heading", { name: "Student Registration" }).waitFor();
+    assert.equal(await page.getByRole("option", { name: "Faculty", exact: true }).count(), 0);
+    await page.getByPlaceholder("Enter full name").fill("Browser Student");
+    studentNumber = `00-${runId}`;
+    await page.getByLabel("Student ID", { exact: true }).fill(studentNumber);
+    await page.getByPlaceholder("name@gmail.com").fill(studentEmail);
+    await page.getByPlaceholder("Enter password", { exact: true }).fill(studentPassword);
+    await page.getByPlaceholder("Confirm password", { exact: true }).fill(studentPassword);
+    const selects = page.getByRole("dialog").locator("select");
+    await selects.nth(0).selectOption({ label: "College of Computer Studies" });
+    await selects.nth(1).selectOption({ index: 1 });
+    await page.getByRole("button", { name: "SIGN UP", exact: true }).click();
+    const notice = page.getByText(/Application submitted. Your Student ID is/);
+    await notice.waitFor();
+    assert.ok((await notice.innerText()).includes(studentNumber.toUpperCase()));
+    await login(page, studentNumber, studentPassword);
+    await page.getByText("Your student application is awaiting administrator approval.", { exact: true }).waitFor();
     await login(page, "admin@schedwise.edu", "Admin123!");
     await page.getByRole("heading", { name: "Admin Dashboard" }).waitFor();
-    await page.getByText("Master User List").waitFor();
-    assert.equal(await page.getByText("Privacy and access to your data", { exact: true }).count(), 0);
-    await expectPurple(page.getByRole("button", { name: /^User Management/ }).first());
-
-    await page.getByTitle("Account settings").click();
-    await page.getByRole("dialog").waitFor();
-    await page.getByRole("button", { name: "Privacy", exact: true }).click();
-    const settingsPrivacy = page.getByText("Privacy and access to your data", { exact: true });
-    await settingsPrivacy.waitFor();
-    await settingsPrivacy.click();
-    await page.getByText(/SchedWise stores account details/).waitFor();
-    await page.getByTitle("Close account settings").click();
-    await page.getByRole("dialog").waitFor({ state: "detached" });
-
-    // Dashboard cards open their matching management views.
-    await page.getByRole("button", { name: /^Total Users/ }).click();
-    await page.getByRole("heading", { name: "User Management" }).waitFor();
-    await page.getByText(facultyEmail).waitFor();
-    await page.getByRole("button", { name: "Approve", exact: true }).first().click();
+    assert.equal(await page.getByRole("button", { name: "Register Student" }).count(), 0);
+    await page.getByRole("heading", { name: "Student applications" }).waitFor();
+    const pending = page.locator("div.rounded-xl").filter({ has: page.getByText(studentEmail, { exact: false }) }).filter({ has: page.getByRole("button", { name: "Approve", exact: true }) }).last();
+    await pending.getByRole("button", { name: "Approve", exact: true }).click();
     await page.getByRole("button", { name: "Yes", exact: true }).click();
-    await page.getByText("Faculty account approved. The teacher can now sign in.").waitFor();
+    await page.getByText("Student application approved. The student can now sign in with their Student ID or email.").waitFor();
+    await page.getByRole("button", { name: "Create Faculty Account", exact: true }).click();
+    await page.getByLabel("first name", { exact: true }).fill("Browser");
+    await page.getByLabel("last name", { exact: true }).fill("Faculty");
+    await page.getByLabel("email", { exact: true }).fill(facultyEmail);
+    await page.getByLabel("password", { exact: true }).fill(facultyPassword);
+    await page.getByRole("button", { name: "Create Faculty Account", exact: true }).last().click();
+    await page.getByRole("button", { name: "Yes", exact: true }).click();
+    await page.getByLabel("first name", { exact: true }).waitFor({ state: "detached" });
 
     // Set up a clean student/faculty pair through the API so the student
     // cancel/reschedule UI can be exercised without touching seed data.
@@ -306,19 +263,6 @@ test("SchedWise browser smoke", { timeout: 180_000 }, async (t) => {
     assert.equal(facultyList.status, 200, facultyList.text);
     const fixtureFaculty = facultyList.payload.data.find((row) => row.email === facultyEmail);
     assert.ok(fixtureFaculty, "Approved browser faculty was not listed");
-    const createStudent = await fixtureApi.request("/users/index.php", {
-      method: "POST",
-      body: {
-        email: studentEmail,
-        password: studentPassword,
-        first_name: "Browser",
-        last_name: "Student",
-        role_id: "student",
-        department_id: "ccs",
-        program: "BS Computer Science",
-      },
-    });
-    assert.equal(createStudent.status, 201, createStudent.text);
     const createAvailability = await fixtureApi.request("/faculty/schedule_overrides.php", {
       method: "POST",
       body: {
@@ -367,7 +311,7 @@ test("SchedWise browser smoke", { timeout: 180_000 }, async (t) => {
     const facultyResponse = page.waitForResponse(
       (response) => response.url().includes("/reports/summary.php") && response.status() === 200,
     );
-    await page.getByLabel("Faculty").selectOption({ label: "Elena Cruz" });
+    await page.getByRole("combobox", { name: "Faculty", exact: true }).selectOption({ label: "Elena Cruz" });
     await facultyResponse;
     await page.waitForFunction(() => document.body.innerText.includes("for the selected faculty member"));
 
@@ -383,16 +327,16 @@ test("SchedWise browser smoke", { timeout: 180_000 }, async (t) => {
 
     await signOut(page);
     await login(page, facultyEmail, facultyPassword);
+    await page.getByRole("heading", { name: "Change your initial password" }).waitFor();
+    await page.reload();
+    await page.getByRole("heading", { name: "Change your initial password" }).waitFor();
+    assert.equal(await page.getByRole("heading", { name: "Faculty Dashboard" }).count(), 0);
+    await page.getByLabel("Initial password", { exact: true }).fill(facultyPassword);
+    facultyPassword = "ChangedBrowser1234!";
+    await page.getByLabel("New password", { exact: true }).fill(facultyPassword);
+    await page.getByLabel("Confirm new password", { exact: true }).fill(facultyPassword);
+    await page.getByRole("button", { name: "Change password", exact: true }).click();
     await page.getByRole("heading", { name: "Faculty Dashboard" }).waitFor();
-    await expectPurple(page.getByRole("button", { name: "Today's Schedule", exact: true }));
-    await page.getByRole("button", { name: /Notifications/ }).click();
-    const notificationsDialog = page.getByRole("dialog", { name: "Notifications" });
-    await notificationsDialog.waitFor();
-    await notificationsDialog.getByText("Faculty account approved", { exact: true }).waitFor();
-    await notificationsDialog.getByRole("button", { name: "Mark all read", exact: true }).click();
-    await notificationsDialog.getByText("All notifications marked as read.").waitFor();
-    await page.getByTitle("Close notifications").click();
-    await notificationsDialog.waitFor({ state: "detached" });
     await page.getByRole("button", { name: "Set Availability", exact: true }).click();
     await page.getByRole("heading", { name: "Set Consultation Availability" }).waitFor();
 

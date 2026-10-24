@@ -63,23 +63,16 @@ function syncAccountIdSequence(PDO $pdo, string $role): void
     )->execute([$role, $highest, $highest]);
 }
 
-/**
- * Validate email format and institutional domain
- */
-function validateEmail(string $email, bool $requireInstitutional = false): bool
+/** Validate a standard email address without restricting its domain. */
+function validateEmail(string $email): bool
 {
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        return false;
-    }
+    return strlen($email) <= 255 && filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
+}
 
-    if ($requireInstitutional) {
-        // Require an academic TLD segment (e.g. name@schedwise.edu, name@x.ac.uk,
-        // name@student.college.edu) - customize as needed
-        $institutionalPattern = '/@([a-z0-9-]+\.)+(edu|ac|sch|school|college|university)(\.[a-z]{2,})?$/i';
-        return (bool) preg_match($institutionalPattern, $email);
-    }
-
-    return true;
+/** Student IDs are supplied by the student; preserve punctuation and leading zeroes. */
+function validateStudentNumber(string $number): bool
+{
+    return (bool)preg_match('/^[A-Z0-9][A-Z0-9._-]{0,99}$/i', $number);
 }
 
 /**
@@ -265,14 +258,21 @@ function validateRegistrationData(array $data): array
 
     $required = ['email', 'password', 'first_name', 'last_name', 'role_id'];
     foreach ($required as $field) {
-        if (empty($data[$field])) {
-            $errors[$field] = ucfirst(str_replace('_', ' ', $field)) . ' is required';
+        if (!isset($data[$field]) || !is_string($data[$field]) || trim($data[$field]) === '') {
+            $errors[$field] = ucfirst(str_replace('_', ' ', $field)) . ' must be non-empty text.';
         }
     }
+    foreach (['student_number', 'department_id', 'program', 'phone'] as $field) {
+        if (isset($data[$field]) && !is_string($data[$field])) {
+            $errors[$field] = ucfirst(str_replace('_', ' ', $field)) . ' must be text.';
+        }
+    }
+    // Reject malformed JSON field types before passing values to typed validators or SQL.
+    if ($errors !== []) return $errors;
 
     if (!empty($data['email'])) {
-        if (!validateEmail($data['email'], true)) { // Require institutional email
-            $errors['email'] = 'Please provide a valid institutional email address';
+        if (!validateEmail(trim((string)$data['email']))) {
+            $errors['email'] = 'Enter a valid email address.';
         }
     }
 

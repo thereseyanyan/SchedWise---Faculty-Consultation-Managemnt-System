@@ -31,7 +31,7 @@ try {
         'SELECT ev.id, ev.user_id, ev.used_at,
                 (ev.expires_at <= NOW()) AS is_expired,
                 u.role_id, u.status, u.email, u.email_verified_at,
-                u.faculty_approval_status
+                u.student_approval_status
          FROM email_verifications ev
          JOIN users u ON u.id = ev.user_id
          WHERE ev.token_hash = :token_hash
@@ -44,9 +44,9 @@ try {
         respond(['error' => 'This verification link is invalid or has expired.'], 400);
     }
 
-    $isFaculty = $verification['role_id'] === 'faculty';
+    $isFaculty = $verification['role_id'] === 'student';
     $awaitingApproval = $isFaculty
-        && $verification['faculty_approval_status'] === 'pending';
+        && $verification['student_approval_status'] === 'pending';
 
     // Verification is idempotent for an already verified account. This keeps
     // browser retries and React development-mode double mounts from turning a
@@ -55,17 +55,17 @@ try {
         if ($verification['email_verified_at'] !== null) {
             if ($awaitingApproval) {
                 respond([
-                    'message' => 'Email already verified. Your faculty account is awaiting administrator approval.',
+                    'message' => 'Email already verified. Your student account is awaiting administrator approval.',
                     'approval_required' => true,
                 ]);
             }
             if ($verification['status'] === 'active') {
                 respond(['message' => 'Email already verified. You can sign in.']);
             }
-            if ($isFaculty && $verification['faculty_approval_status'] === 'rejected') {
+            if ($isFaculty && $verification['student_approval_status'] === 'rejected') {
                 respond([
-                    'error' => 'This faculty registration was not approved. Contact an administrator.',
-                    'code' => 'faculty_approval_rejected',
+                    'error' => 'This student registration was not approved. Contact an administrator.',
+                    'code' => 'student_approval_rejected',
                 ], 403);
             }
         }
@@ -82,7 +82,7 @@ try {
 
     $pdo->beginTransaction();
 
-    // A self-registered faculty account is verified but stays pending until an
+    // A self-registered student account is verified but stays pending until an
     // administrator approves it. Student and administrator-created accounts
     // become active immediately.
     if ($verification['status'] === 'pending' && !$awaitingApproval) {
@@ -108,12 +108,12 @@ try {
     $pdo->commit();
 
     logAudit('verify_email', 'user', $verification['user_id'], [], [
-        'status' => $awaitingApproval ? 'pending_faculty_approval' : 'active',
+        'status' => $awaitingApproval ? 'pending_student_approval' : 'active',
     ]);
 
     if ($awaitingApproval) {
         respond([
-            'message' => 'Email verified. Your faculty account is awaiting administrator approval.',
+            'message' => 'Email verified. Your student account is awaiting administrator approval.',
             'approval_required' => true,
         ]);
     }

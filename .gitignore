@@ -4,3 +4,5 @@ backend/config.php
 frontend/.env
 .runtime/
 *.log
+/backend/config.php
+/.runtime/

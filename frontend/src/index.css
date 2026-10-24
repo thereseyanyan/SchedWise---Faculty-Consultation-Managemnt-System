@@ -1,15 +1,45 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+@import "@fontsource/baloo-2/400.css";
+@import "@fontsource/baloo-2/500.css";
+@import "@fontsource/baloo-2/600.css";
+@import "@fontsource/baloo-2/700.css";
+@import "@fontsource/baloo-2/800.css";
 @import "tailwindcss";
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Baloo 2", "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  --color-schedwise-navy: #1E1B4B;
+  --color-schedwise-purple: #6D28D9;
+  --color-schedwise-lavender-50: #F5F3FF;
+  --color-schedwise-lavender-100: #EDE9FE;
+  --color-schedwise-lavender-200: #E4DAFB;
+  --color-schedwise-yellow: #F59E0B;
+  --color-schedwise-amber: #F59E0B;
+  --color-schedwise-body: #6B7280;
+  --color-schedwise-success: #10B981;
+  --color-schedwise-danger: #E11D48;
+  --color-schedwise-white: #FFFFFF;
+  --color-brand-deep-purple: #2D1B69;
+  --color-welcome-bg: #EDE9FE;
+  --color-welcome-bg-alt: #EEEAFF;
+
+  --radius-card: 16px;
+  --radius-pill: 999px;
+
+  --shadow-schedwise: 0 10px 40px rgba(109, 40, 217, 0.12);
+  --shadow-schedwise-soft: 0 8px 30px rgba(109, 40, 217, 0.15);
 }
 
 html {
   /* Keep centered layouts aligned when navigation changes the page height. */
   scrollbar-gutter: stable;
-  background: #ffffff;
-  color: #1e293b;
+  background: var(--color-schedwise-lavender-50);
+  color: var(--color-schedwise-body);
 }
 
 @supports not (scrollbar-gutter: stable) {

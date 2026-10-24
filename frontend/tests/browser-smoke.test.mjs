@@ -111,10 +111,14 @@ async function login(page, email, password) {
 async function signOut(page) {
   await page.getByRole("button", { name: "Sign Out", exact: true }).click();
   await page.getByRole("button", { name: "Yes", exact: true }).click();
-  await page.waitForFunction(() => /Get Started|Login/.test(document.body.innerText));
-  const getStarted = page.getByRole("button", { name: "Get Started", exact: true });
-  if (await getStarted.count()) {
-    await getStarted.click();
+  await page.waitForFunction(() => /ARE YOU A|Welcome to SchedWise|Login/.test(document.body.innerText));
+  const loginFromWelcome = page.getByRole("button", { name: "Login", exact: true });
+  if (await loginFromWelcome.count()) {
+    const studentCard = page.getByRole("radio", { name: /student/i }).first();
+    if (await studentCard.count()) {
+      await studentCard.click();
+    }
+    await loginFromWelcome.first().click();
   }
   await page.getByRole("heading", { name: "Login" }).waitFor();
 }
@@ -212,12 +216,22 @@ test("SchedWise browser smoke", { timeout: 180_000 }, async (t) => {
 
   try {
     await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
-    await page.waitForFunction(() => /Get Started|Login/.test(document.body.innerText));
-    const getStarted = page.getByRole("button", { name: "Get Started", exact: true });
-    if (await getStarted.count()) {
-      await getStarted.click();
+    await page.waitForFunction(() => /ARE YOU A|Welcome to SchedWise|Login/.test(document.body.innerText));
+    const loginLink = page.getByRole("button", { name: "Login", exact: true }).first();
+    if (await loginLink.count()) {
+      // If already on login screen
+      await page.getByRole("heading", { name: "Login" }).waitFor();
+    } else {
+      // On welcome page - select a role then click Login
+      const studentCard = page.getByRole("radio", { name: /student/i }).first();
+      if (await studentCard.count()) {
+        await studentCard.click();
+      } else {
+        await page.getByText(/Student/i).first().click();
+      }
+      await page.getByRole("button", { name: "Login", exact: true }).click();
+      await page.getByRole("heading", { name: "Login" }).waitFor();
     }
-    await page.getByRole("heading", { name: "Login" }).waitFor();
 
     await expectPurple(page.getByRole("button", { name: "Login", exact: true }));
     await page.getByRole("button", { name: "Login", exact: true }).click();

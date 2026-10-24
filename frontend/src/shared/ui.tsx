@@ -1,7 +1,8 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react"
-import { GraduationCap, LogOut, Search, Settings } from "lucide-react"
+import { LogOut, Search, Settings } from "lucide-react"
 import { NotificationsButton } from "./NotificationsButton"
 import type { Icon, Role, Stat } from "./types"
+import { BrandLogo } from "./BrandLogo"
 
 export const ButtonTag = "button"
 export const InputTag = "input"
@@ -165,11 +166,8 @@ export function PortalShell({
       <WaveHeader className="h-56" />
       <header className="relative z-10 mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 pt-5 sm:px-8">
         <div className="flex items-center gap-3 text-white">
-          <div className="flex size-10 items-center justify-center rounded-full bg-white/15 ring-1 ring-white/30">
-            <GraduationCap size={19} />
-          </div>
+          <BrandLogo className="text-white" />
           <div className="hidden sm:block">
-            <p className="text-sm font-semibold tracking-tight">SchedWise</p>
             <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-purple-100">
               {role === "Admin" ? "Admin Control Panel" : `${role} Portal`}
             </p>

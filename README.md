@@ -11,6 +11,13 @@ SchedWise is a local-first academic consultation platform for students, faculty,
 
 ---
 
+## Change Summary (2026-10-24)
+
+- Redesigned **Login** and **Sign Up** as popup modals over the Welcome page with backdrop `rgba(45,27,105,0.30)` (#2D1B69 at 30%), soft blur on Welcome page behind modal (no Welcome opacity reduction), Esc/backdrop/Back close, focus trap, portal. Split into small components (AuthModal, LoginForm, SignUpForm, IllustrationPanel, RoleCard). Connected to existing API (login, register, forgot/reset) with validation, loading states, verification/approval messages, and email autofill opt-out preserved. Privacy notice kept on registration.
+- Redesigned **Welcome page** to match "Student Selected" style: light lavender container with purple border, four corner decorative circles clipped, taller equal-height centered role cards with centered icons/tile/slot, check badge on selected card, action buttons below cards.
+- Introduced centralized design tokens in `frontend/src/index.css` (@theme) with colors, fonts (Inter + Baloo 2 loaded locally via @fontsource), radius, shadows, and preserved root scrollbar-gutter. Added `frontend/src/shared/BrandLogo.tsx` (text wordmark only, `showMark?: boolean` default false) for one-file future logo enablement; applied BrandLogo across auth and portal headers. Updated page title to "SchedWise".
+- Updated browser smoke test to route from welcome page; added/adjusted navigation expectations. TypeScript and production build verified.
+
 ## Change Summary (2026-10-22)
 
 - Rebranded the system as **SchedWise** across the interface, email templates, API messages, launcher, scripts, documentation, demo accounts, local database name, and `SCHEDWISE_*` configuration variables. The local database was migrated from `fcams` to `schedwise`; a pre-migration backup is retained, and the working database was reset to the documented clean demo baseline after stale manual data was detected.
@@ -138,6 +145,9 @@ SchedWise provides:
 
 - [ ] None for the local demo. The former dependency-preflight gap is covered by the launcher; see Implemented. Production blockers are tracked in **Production Backend Backlog** below.
 
+#### TODO
+- [ ] Add the final logo SVG and enable BrandLogo showMark.
+
 #### P1 — next quality pass
 
 - [x] Expand the committed browser smoke test to privacy placement, dashboard card navigation, faculty onboarding/approval, and the purple theme. The current test covers inline validation, sign-out cancel/accept, admin login/search, appointment filters, report filters/export, the Audit Log view, and seeded role routing.
@@ -214,7 +224,7 @@ Apache is **not required** for local use. The launcher starts the PHP built-in s
 
 | Layer | Current choice |
 | --- | --- |
-| Frontend | React 19, TypeScript, Vite 8, Tailwind CSS 4, Lucide icons |
+| Frontend | React 19, TypeScript, Vite 8, Tailwind CSS 4, Lucide icons, @fontsource/inter, @fontsource/baloo-2 |
 | Backend | PHP 8.0+ (strict types), PDO MySQL |
 | Database | MySQL 9.5 locally |
 | Local tools | PowerShell launcher, VBS hidden wrapper, Windows shortcuts |

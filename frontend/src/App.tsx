@@ -58,9 +58,6 @@ export default function App() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
-          <div className="flex items-center justify-center mb-4">
-            <GraduationCap size={32} className="text-purple-600" />
-          </div>
           <p className="text-sm text-slate-500">Loading...</p>
         </div>
       </div>

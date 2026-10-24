@@ -1,5 +1,6 @@
 export * from "./appointments"
 export * from "./auth"
+export * from "./BrandLogo"
 export * from "./contexts"
 export * from "./datetime"
 export * from "./types"

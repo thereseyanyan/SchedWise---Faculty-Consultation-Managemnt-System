@@ -342,7 +342,7 @@ export function FacultyTodayView() {
       <div className="mt-6" />
       {declineTarget && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/55 p-0 sm:items-center sm:p-6"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-[rgba(45,27,105,0.30)] p-0 backdrop-blur-[6px] sm:items-center sm:p-6"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) setDeclineTarget(null)
           }}
@@ -351,38 +351,32 @@ export function FacultyTodayView() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="faculty-decline-title"
-            className="w-full max-w-md rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl"
+            className="max-h-[90vh] w-[calc(100%-32px)] max-w-[440px] overflow-y-auto rounded-[20px] bg-white p-6 shadow-[0_20px_60px_rgba(45,27,105,0.18)] sm:rounded-[20px]"
           >
             <form onSubmit={declineRequest}>
-              <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-purple-600">
-                    Appointment request
-                  </p>
-                  <h2 id="faculty-decline-title" className="mt-1 text-xl font-bold tracking-tight text-slate-900">
-                    Decline request
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <h2 id="faculty-decline-title" className="text-[20px] leading-[28px] font-semibold text-ink">
+                    Decline {declineTarget.student_name.split(" ")[0]}'s request?
                   </h2>
-                  <p className="mt-1 text-sm leading-6 text-slate-500">
-                    {declineTarget.student_name} · {declineTarget.timeLabel}
+                  <p className="mt-1 text-sm text-muted">
+                    {declineTarget.topic || declineTarget.reason} · {declineTarget.timeLabel}
                   </p>
                 </div>
-                <Button
+                <button
                   type="button"
                   onClick={() => setDeclineTarget(null)}
-                  title="Close decline dialog"
-                  className="size-9 shrink-0 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                  aria-label="Close"
+                  className="flex size-8 shrink-0 items-center justify-center rounded-full bg-soft text-ink transition hover:opacity-90"
                 >
-                  <X size={18} />
-                </Button>
+                  <X size={16} />
+                </button>
               </div>
-              <div className="space-y-4 px-6 py-6">
-                <p className="rounded-xl bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-600">
-                  The student will receive this reason with the declined request.
-                </p>
+              <div className="mt-4">
                 <label className="block">
-                  <span className={pillLabel}>Reason for declining</span>
+                  <span className="text-sm font-semibold text-ink">Reason for declining · Required</span>
                   <TextareaTag
-                    rows={4}
+                    rows={5}
                     autoFocus
                     maxLength={5000}
                     value={declineReason}
@@ -392,28 +386,34 @@ export function FacultyTodayView() {
                       setDeclineReason(event.target.value)
                       setDeclineError("")
                     }}
-                    placeholder="Explain why this time does not work..."
-                    className={`${pillField} resize-none`}
+                    placeholder="Share a reason with the student"
+                    className={`mt-2 w-full rounded-[12px] border border-[#C4B5FD] px-3 py-2 text-sm text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary`}
                   />
-                  <FieldError id="faculty-decline-error" message={declineError || undefined} />
+                  {declineError ? (
+                    <p id="faculty-decline-error" role="alert" className="mt-2 flex items-center gap-2 text-[13px] text-[#B91C1C]">
+                      <AlertCircle size={16} />
+                      {declineError}
+                    </p>
+                  ) : null}
                 </label>
               </div>
-              <div className="flex justify-end gap-2 border-t border-slate-100 px-6 py-4">
+              <div className="mt-4 flex gap-3">
                 <Button
                   type="button"
                   onClick={() => setDeclineTarget(null)}
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                  className="h-11 flex-1 rounded-full border border-primary bg-white text-sm font-semibold text-primary"
                 >
                   Keep request
                 </Button>
                 <Button
                   type="submit"
                   disabled={actingId === declineTarget.id}
-                  className="rounded-[4px] bg-rose-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                  className="h-11 flex-1 rounded-full bg-[#DC4A4A] text-sm font-semibold text-white disabled:opacity-70"
                 >
-                  {actingId === declineTarget.id ? "Declining…" : "Decline request"}
+                  {actingId === declineTarget.id ? "Declining..." : "Decline request"}
                 </Button>
               </div>
+              <p className="mt-3 text-center text-[13px] text-muted">The request remains unchanged until you confirm.</p>
             </form>
           </div>
         </div>

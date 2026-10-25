@@ -9,7 +9,6 @@ import {
   Clock3,
   LayoutDashboard,
   NotebookPen,
-  UsersRound,
 } from "lucide-react"
 import { AppointmentListView } from "../appointments/AppointmentListView"
 import { FacultyAvailabilityView } from "./FacultyAvailabilityView"

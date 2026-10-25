@@ -18,7 +18,7 @@ export function Button({
   return (
     <ButtonTag
       type={type}
-      className={`inline-flex cursor-pointer items-center justify-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+      className={`inline-flex cursor-pointer items-center justify-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
       {...props}
     >
       {children}
@@ -132,6 +132,27 @@ export function StatusBadge({
   )
 }
 
+function getGreeting() {
+  const hour = new Date().getHours()
+  if (hour < 12) return "Good morning"
+  if (hour < 18) return "Good afternoon"
+  return "Good evening"
+}
+
+function getDateChip() {
+  const now = new Date()
+  const datePart = now.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" })
+  const timePart = now.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
+  return `${datePart} · ${timePart}`
+}
+
+function getLastNameOrFull(name: string) {
+  const trimmed = name.replace(/^Dr\.\s*/i, "").trim()
+  const parts = trimmed.split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return trimmed
+  return parts[parts.length - 1]
+}
+
 export function PortalShell({
   role,
   name,
@@ -142,6 +163,7 @@ export function PortalShell({
   onOpenAccount,
   onSignOut,
   stats,
+  banner,
   children,
 }: {
   role: Role
@@ -153,133 +175,154 @@ export function PortalShell({
   onOpenAccount: () => void
   onSignOut: () => void
   stats: Stat[]
+  banner?: ReactNode
   children: ReactNode
 }) {
   const initials = name
-    .replace(/^Dr\.\s*/, "")
+    .replace(/^Dr\.\s*/i, "")
     .split(" ")
     .map((w) => w[0])
     .slice(0, 2)
     .join("")
-  return (
-    <div className="relative min-h-screen overflow-x-hidden bg-white text-[#1E293B]">
-      <WaveHeader className="h-56" />
-      <header className="relative z-10 mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 pt-5 sm:px-8">
-        <div className="flex items-center gap-3 text-white">
-          <BrandLogo className="text-white" />
-          <div className="hidden sm:block">
-            <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-purple-100">
-              {role === "Admin" ? "Admin Control Panel" : `${role} Portal`}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2.5 rounded-2xl bg-white/15 py-1.5 pl-1.5 pr-4 text-white ring-1 ring-white/25">
-            <span className="flex size-8 items-center justify-center rounded-xl bg-white text-xs font-semibold text-purple-700">
-              {initials}
-            </span>
-            <div className="min-w-0 leading-tight">
-              <p className="truncate text-xs font-semibold">{name}</p>
-              <p className="hidden truncate text-[11px] text-purple-100 sm:block">
-                {detail}
-              </p>
-            </div>
-          </div>
-          <NotificationsButton />
-          <Button
-            onClick={onOpenAccount}
-            title="Account settings"
-            className="gap-2 rounded-[4px] border border-white/70 px-3 py-2 text-xs font-semibold text-white hover:bg-white hover:text-purple-700"
-          >
-            <Settings size={14} />
-            <span className="hidden sm:inline">Account</span>
-          </Button>
-          <Button
-            onClick={onSignOut}
-            title="Sign out"
-            className="gap-2 rounded-[4px] border border-white/70 px-3 py-2 text-xs font-semibold text-white hover:bg-white hover:text-purple-700"
-          >
-            <LogOut size={14} />
-            <span className="hidden sm:inline">Sign Out</span>
-          </Button>
-        </div>
-      </header>
+    .toUpperCase()
+  const lastName = getLastNameOrFull(name)
+  const greetingName = lastName ? `Prof. ${lastName}` : name
+  const dateChip = getDateChip()
+  const subtitle = detail && detail.trim() ? detail.trim() : null
 
-      <main className="relative z-10 mx-auto max-w-7xl px-5 pb-16 pt-40 sm:px-8">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-purple-600">
-              Welcome back
-            </p>
-            <h1 className="mt-1.5 text-3xl font-bold tracking-tight text-[#1E293B]">
-              {role} Dashboard
-            </h1>
-          </div>
-          <nav className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-            {navItems.map(({ label, icon: IconComponent, badge }) => (
-              <Button
+  return (
+    <div className="min-h-screen bg-page-bg text-ink">
+      <aside className="fixed left-0 top-0 z-40 flex h-screen w-[248px] flex-col border-r border-border bg-white">
+        <div className="flex h-[88px] items-center px-6">
+          <BrandLogo className="text-ink" />
+        </div>
+        <nav className="flex flex-1 flex-col gap-1 px-3">
+          {navItems.map(({ label, icon: IconComponent, badge }) => {
+            const isActive = active === label
+            return (
+              <button
                 key={label}
+                type="button"
                 onClick={() => onNavigate(label)}
-                aria-label={
-                  badge
-                    ? `${label}, ${badge} student ${badge === 1 ? "application" : "applications"} pending`
-                    : undefined
-                }
-                className={`shrink-0 gap-2 rounded-2xl border px-4 py-2.5 text-sm font-medium ${
-                  active === label
-                    ? "border-purple-600 bg-purple-600 text-white"
-                    : "border-transparent text-slate-500 hover:border-purple-100 hover:bg-purple-50 hover:text-purple-700"
+                className={`group relative flex h-11 w-full items-center gap-3 rounded-full px-3 text-sm transition ${
+                  isActive
+                    ? "bg-primary text-white"
+                    : "text-ink hover:bg-soft"
                 }`}
               >
-                <IconComponent size={16} strokeWidth={1.9} />
-                {label}
-                {badge ? (
+                <IconComponent
+                  size={20}
+                  strokeWidth={1.9}
+                  className={`shrink-0 ${isActive ? "text-white" : "text-primary/70"}`}
+                />
+                <span className="min-w-0 flex-1 truncate text-left leading-5">{label}</span>
+                {badge !== undefined && badge !== null && badge > 0 ? (
                   <span
-                    title={`${badge} student ${badge === 1 ? "application" : "applications"} pending`}
-                    className={`ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
-                      active === label
-                        ? "bg-white/20 text-white"
-                        : "bg-amber-100 text-amber-800 ring-1 ring-inset ring-amber-600/20"
+                    className={`ml-auto inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-semibold ${
+                      isActive ? "bg-white/90 text-ink" : "bg-soft text-ink"
                     }`}
                   >
                     {badge > 99 ? "99+" : badge}
                   </span>
                 ) : null}
-              </Button>
-            ))}
-          </nav>
+              </button>
+            )
+          })}
+        </nav>
+        <div className="mt-auto flex flex-col gap-2 px-3 pb-4">
+          <div className="flex items-center gap-3 rounded-[16px] border border-border-card bg-white p-4 shadow-[0_1px_2px_rgba(45,27,105,0.06)]">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-soft text-xs font-semibold text-primary">
+              {initials}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-ink">{name}</p>
+              {detail && detail.trim() ? (
+                <div className="mt-0.5 text-xs text-muted">
+                  {detail
+                    .split(/\n|,/)
+                    .filter(Boolean)
+                    .map((line, idx) => (
+                      <p key={idx} className="truncate leading-4">
+                        {line.trim()}
+                      </p>
+                    ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onOpenAccount}
+            className="flex h-11 items-center gap-3 rounded-full px-3 text-sm text-ink transition hover:bg-soft"
+          >
+            <Settings size={20} className="text-primary/70" />
+            <span className="truncate">Account</span>
+          </button>
+          <button
+            type="button"
+            onClick={onSignOut}
+            className="flex h-11 items-center gap-3 rounded-full px-3 text-sm text-ink transition hover:bg-soft"
+          >
+            <LogOut size={20} className="text-primary/70" />
+            <span className="truncate">Sign Out</span>
+          </button>
         </div>
+      </aside>
 
-        <div className="mt-7 grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {stats.map(({ label, value, hint, icon: IconComponent, onClick, attention }) => (
-            <button type="button" onClick={onClick}
-              key={label}
-              className={`cursor-pointer rounded-2xl border p-5 text-left shadow-sm transition focus-visible:outline-2 focus-visible:outline-purple-600 ${
-                attention
-                  ? "border-amber-300 bg-amber-50/50 hover:border-amber-400 hover:bg-amber-50"
-                  : "border-purple-100 bg-white hover:border-purple-400 hover:bg-purple-50"
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-medium text-slate-500">{label}</p>
-                <span className={`flex size-8 items-center justify-center rounded-xl ${
-                  attention ? "bg-amber-100 text-amber-700" : "bg-purple-50 text-purple-600"
-                }`}>
-                  <IconComponent size={15} />
-                </span>
+      <div className="pl-[248px]">
+        <header className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-4 border-b border-divider bg-page-bg/95 px-6 py-4 backdrop-blur">
+          <div className="min-w-0">
+            <h1 className="font-[var(--font-display)] text-[28px] leading-[36px] text-ink">
+              {getGreeting()}, {greetingName}
+            </h1>
+            {subtitle ? <p className="mt-1 text-sm text-muted">{subtitle}</p> : null}
+          </div>
+          <div className="flex flex-wrap items-center gap-4 pr-6">
+            <span className="inline-flex items-center rounded-full bg-soft px-3 py-1.5 text-sm text-ink whitespace-nowrap">
+              {dateChip}
+            </span>
+            <div className="relative">
+              <NotificationsButton />
+            </div>
+            <div className="flex items-center gap-2.5 rounded-full border border-border-card bg-white px-3 py-1.5 shadow-[0_1px_2px_rgba(45,27,105,0.06)]">
+              <span className="flex size-9 items-center justify-center rounded-full bg-soft text-xs font-semibold text-primary">
+                {initials}
+              </span>
+              <div className="min-w-0 leading-tight">
+                <p className="truncate text-sm font-semibold text-ink">{name}</p>
+                <p className="truncate text-xs text-muted">{role}</p>
               </div>
-              <p className="mt-3 text-2xl font-bold tabular-nums tracking-tight">
-                {value}
-              </p>
-              <p className={`mt-1 text-[11px] ${
-                attention ? "font-semibold text-amber-700" : "text-slate-400"
-              }`}>{hint}</p>
-            </button>
-          ))}
-        </div>
-
-        <div className="mt-10 border-t border-slate-100 pt-8">{children}</div>
-      </main>
+            </div>
+          </div>
+        </header>
+        <main className="mx-auto max-w-[1120px] px-6 py-6">
+          {banner ? <div className="mt-6">{banner}</div> : null}
+          <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+            {stats.map(({ label, value, hint, icon: IconComponent, onClick, attention }) => (
+              <button
+                type="button"
+                onClick={onClick}
+                key={label}
+                className={`cursor-pointer rounded-[16px] border p-4 text-left shadow-[0_1px_2px_rgba(45,27,105,0.06)] transition focus-visible:outline-2 focus-visible:outline-primary ${
+                  attention ? "border-amber bg-amber-tint/60" : "border-border-card bg-card"
+                } hover:border-primary`}
+              >
+                <div className="flex items-start gap-3">
+                  <span className={`mt-0.5 flex size-8 items-center justify-center rounded-lg ${attention ? "bg-amber-tint text-amber" : "bg-soft text-primary"}`}>
+                    <IconComponent size={16} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[12px] font-semibold uppercase tracking-[0.05em] text-muted truncate">{label}</p>
+                    <p className="mt-1 font-[var(--font-display)] text-[36px] leading-[40px] font-bold text-ink">{value}</p>
+                    {hint ? <p className="mt-1 text-sm text-muted truncate">{hint}</p> : null}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+          <div className="mt-6">{children}</div>
+        </main>
+      </div>
     </div>
   )
 }

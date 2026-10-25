@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react"
-import { LogOut, Search, Settings } from "lucide-react"
+import { Clock3, LogOut, Search, Settings } from "lucide-react"
 import { NotificationsButton } from "./NotificationsButton"
 import type { Icon, Role, Stat } from "./types"
 import { BrandLogo } from "./BrandLogo"
@@ -230,25 +230,49 @@ export function PortalShell({
           })}
         </nav>
         <div className="mt-auto flex flex-col gap-2 px-3 pb-4">
-          <div className="flex items-center gap-3 rounded-[16px] border border-border-card bg-white p-4 shadow-[0_1px_2px_rgba(45,27,105,0.06)]">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-soft text-xs font-semibold text-primary">
-              {initials}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-ink">{name}</p>
-              {detail && detail.trim() ? (
-                <div className="mt-0.5 text-xs text-muted">
-                  {detail
-                    .split(/\n|,/)
-                    .filter(Boolean)
-                    .map((line, idx) => (
-                      <p key={idx} className="truncate leading-4">
-                        {line.trim()}
-                      </p>
-                    ))}
-                </div>
-              ) : null}
+          <div className="flex flex-col gap-2 rounded-[16px] border border-border-card bg-white p-4 shadow-[0_1px_2px_rgba(45,27,105,0.06)]">
+            <div className="flex items-center gap-3">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-soft text-xs font-semibold text-primary">
+                {initials}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-ink">{name}</p>
+                {detail && detail.trim() ? (
+                  <div className="mt-0.5 text-xs text-muted">
+                    {detail
+                      .split(/\n|,/)
+                      .filter(Boolean)
+                      .map((line, idx) => (
+                        <p key={idx} className="truncate leading-4">
+                          {line.trim()}
+                        </p>
+                      ))}
+                  </div>
+                ) : null}
+              </div>
             </div>
+            <div className="mt-1">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-soft px-2.5 py-1 text-[12px] text-muted">
+                <Clock3 size={12} />
+                {(banner as any)?.openTimeToday ?? (banner as any)?.openTimeTodayText ? ((banner as any)?.openTimeToday ?? (banner as any)?.openTimeTodayText) : "No open time today"}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[13px] text-ink">Accepting requests</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked="false"
+                aria-disabled="true"
+                disabled
+                title="Coming soon: not yet connected to the system"
+                className="relative h-6 w-10 rounded-full bg-border opacity-60"
+              >
+                <span className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm" />
+              </button>
+            </div>
+            <p className="text-[12px] text-muted">Coming soon</p>
+            {/* TODO(backend): wire to faculty accepting-requests setting (see README "Pending backend work") */}
           </div>
           <button
             type="button"
@@ -298,27 +322,51 @@ export function PortalShell({
         <main className="mx-auto max-w-[1120px] px-6 py-6">
           {banner ? <div className="mt-6">{banner}</div> : null}
           <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-            {stats.map(({ label, value, hint, icon: IconComponent, onClick, attention }) => (
-              <button
-                type="button"
-                onClick={onClick}
-                key={label}
-                className={`cursor-pointer rounded-[16px] border p-4 text-left shadow-[0_1px_2px_rgba(45,27,105,0.06)] transition focus-visible:outline-2 focus-visible:outline-primary ${
-                  attention ? "border-amber bg-amber-tint/60" : "border-border-card bg-card"
-                } hover:border-primary`}
-              >
-                <div className="flex items-start gap-3">
-                  <span className={`mt-0.5 flex size-8 items-center justify-center rounded-lg ${attention ? "bg-amber-tint text-amber" : "bg-soft text-primary"}`}>
-                    <IconComponent size={16} />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[12px] font-semibold uppercase tracking-[0.05em] text-muted truncate">{label}</p>
-                    <p className="mt-1 font-[var(--font-display)] text-[36px] leading-[40px] font-bold text-ink">{value}</p>
-                    {hint ? <p className="mt-1 text-sm text-muted truncate">{hint}</p> : null}
+              {stats.map(({ label, value, hint, icon: IconComponent, onClick, attention }) => {
+              const interactive = typeof (onClick as any) === "function"
+              if (interactive) {
+                return (
+                  <button
+                    type="button"
+                    onClick={onClick as any}
+                    key={label}
+                    className={`cursor-pointer rounded-[16px] border p-4 text-left shadow-[0_1px_2px_rgba(45,27,105,0.06)] transition ${
+                      attention ? "border-amber bg-amber-tint/60" : "border-border-card bg-card"
+                    } hover:border-primary focus-visible:outline-2 focus-visible:outline-primary`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <span className={`mt-0.5 flex size-8 items-center justify-center rounded-lg ${attention ? "bg-amber-tint text-amber" : "bg-soft text-primary"}`}>
+                        <IconComponent size={16} />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[12px] font-semibold uppercase tracking-[0.05em] text-muted truncate">{label}</p>
+                        <p className="mt-1 font-[var(--font-display)] text-[36px] leading-[40px] font-bold text-ink">{value}</p>
+                        {hint ? <p className="mt-1 text-sm text-muted truncate">{hint}</p> : null}
+                      </div>
+                    </div>
+                  </button>
+                )
+              }
+              return (
+                <div
+                  key={label}
+                  className={`rounded-[16px] border p-4 text-left shadow-[0_1px_2px_rgba(45,27,105,0.06)] transition ${
+                    attention ? "border-amber bg-amber-tint/60" : "border-border-card bg-card"
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <span className={`mt-0.5 flex size-8 items-center justify-center rounded-lg ${attention ? "bg-amber-tint text-amber" : "bg-soft text-primary"}`}>
+                      <IconComponent size={16} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[12px] font-semibold uppercase tracking-[0.05em] text-muted truncate">{label}</p>
+                      <p className="mt-1 font-[var(--font-display)] text-[36px] leading-[40px] font-bold text-ink">{value}</p>
+                      {hint ? <p className="mt-1 text-sm text-muted truncate">{hint}</p> : null}
+                    </div>
                   </div>
                 </div>
-              </button>
-            ))}
+              )
+            })}
           </div>
           <div className="mt-6">{children}</div>
         </main>

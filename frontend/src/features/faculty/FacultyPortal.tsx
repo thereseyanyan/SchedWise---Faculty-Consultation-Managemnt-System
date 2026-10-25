@@ -1,4 +1,4 @@
-import { useContext, useMemo, useState } from "react"
+import { useContext, useEffect, useMemo, useState } from "react"
 import {
   AlertCircle,
   ArrowUpRight,
@@ -22,6 +22,7 @@ import {
   toIso,
   useAppointments,
 } from "../../shared"
+import { facultyAvailabilityApi, facultyScheduleOverridesApi, type FacultyAvailability, type ScheduleOverride } from "../../api"
 
 function formatTimeHM(minutes: number) {
   const hours = Math.floor(minutes / 60)
@@ -56,10 +57,13 @@ export function FacultyPortal({
   const currentUser = useContext(CurrentUserContext)
   const [view, setView] = useState("Dashboard")
   const [appointments] = useAppointments()
+  const [availability, setAvailability] = useState<FacultyAvailability[]>([])
+  const [overrides, setOverrides] = useState<ScheduleOverride[]>([])
   const name = fullName(currentUser?.first_name, currentUser?.last_name, currentUser?.email ?? "Faculty")
   const facultyNumber = currentUser?.faculty_number
   const department = (currentUser as any)?.department
   const today = toIso(new Date())
+  const facultyId = currentUser?.id ?? ""
   const todayCount = appointments.filter((a) => a.date === today && a.status !== "cancelled").length
   const pendingCount = appointments.filter((a) => ["pending", "reschedule_requested"].includes(a.status)).length
   const completedCount = appointments.filter((a) => a.status === "completed").length
@@ -68,6 +72,23 @@ export function FacultyPortal({
   if (department) detailParts.push(department)
   const detail = detailParts.join("\n")
 
+  useEffect(() => {
+    if (!facultyId) return
+    void (async () => {
+      try {
+        const [avail, ov] = await Promise.all([
+          facultyAvailabilityApi.list({ faculty_id: facultyId }),
+          facultyScheduleOverridesApi.list({ faculty_id: facultyId }),
+        ])
+        setAvailability(avail)
+        setOverrides(ov)
+      } catch {
+        setAvailability([])
+        setOverrides([])
+      }
+    })()
+  }, [facultyId])
+
   const nextUp = useMemo(() => {
     const candidates = appointments
       .filter((a) => a.status === "confirmed" && a.date >= today)
@@ -75,13 +96,34 @@ export function FacultyPortal({
     return candidates[0] ?? null
   }, [appointments, today])
 
-  const openTodayChip = useMemo(() => {
-    if (!nextUp) return null
-    const remaining = appointments.filter((a) => a.date === today && a.status === "confirmed").length
-    if (remaining <= 0) return null
-    // Try to compute something simple from remaining count if exact slots unknown
-    return `${remaining} consultation${remaining === 1 ? "" : "s"} left today`
-  }, [appointments, today, nextUp])
+  const openTimeToday = useMemo(() => {
+    const dow = new Date().getDay()
+    let free = 0
+    for (const a of availability) {
+      if (!a.active) continue
+      if (a.weekday !== dow) continue
+      free += Math.max(0, a.end_minutes - a.start_minutes)
+    }
+    for (const o of overrides) {
+      if (o.date !== today) continue
+      if (o.kind === "blocked") {
+        free -= Math.max(0, (o.end_minutes ?? 0) - (o.start_minutes ?? 0))
+      } else if (o.kind === "available") {
+        free += Math.max(0, (o.end_minutes ?? 0) - (o.start_minutes ?? 0))
+      }
+    }
+    if (free < 0) free = 0
+    const busy = appointments
+      .filter((a) => a.date === today && ["pending", "confirmed", "reschedule_requested"].includes(a.status))
+      .reduce((sum, a) => sum + Math.max(0, (a.end ?? (a.start_minutes + 30)) - a.start_minutes), 0)
+    let open = free - busy
+    if (open <= 0) return null
+    const h = Math.floor(open / 60)
+    const m = open % 60
+    if (h > 0 && m > 0) return `${h}h ${m}m of open time today`
+    if (h > 0) return `${h}h of open time today`
+    return `${m}m of open time today`
+  }, [availability, overrides, appointments, today])
 
   const nav = [
     { label: "Dashboard", icon: LayoutDashboard },
@@ -115,11 +157,6 @@ export function FacultyPortal({
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-3 whitespace-nowrap md:shrink-0">
-            {openTodayChip ? (
-              <span className="inline-flex h-10 items-center rounded-full border border-primary/20 bg-white px-4 text-sm font-semibold text-primary">
-                {openTodayChip}
-              </span>
-            ) : null}
             <button
               type="button"
               onClick={() => setDrilldown("Today")}
@@ -154,16 +191,16 @@ export function FacultyPortal({
     <PortalShell
       role="Faculty"
       stats={[
-        { label: "Today", value: String(todayCount), hint: "", icon: Clock3, onClick: () => setDrilldown("Today") },
-        { label: "Today's Consultations", value: String(appointments.filter(a => a.status === 'confirmed').length), hint: "", icon: CalendarClock, onClick: () => setDrilldown("All") },
-        { label: "Pending Requests", value: String(pendingCount), hint: pendingCount > 0 ? "Needs your review" : "", icon: AlertCircle, onClick: () => setDrilldown("Pending Requests") },
-        { label: "Completed This Month", value: String(completedCount), hint: "", icon: CheckCircle2, onClick: () => setDrilldown("Completed") },
+        { label: "Today", value: String(todayCount), hint: "", icon: Clock3, onClick: () => setDrilldown("Today") } as any,
+        { label: "Today's Consultations", value: String(appointments.filter(a => a.status === 'confirmed').length), hint: appointments.filter(a => a.status === 'confirmed').length > 0 ? `${appointments.filter(a => a.status === 'confirmed').length} confirmed` : "", icon: CalendarClock, onClick: () => setDrilldown("All") } as any,
+        { label: "Pending Requests", value: String(pendingCount), hint: pendingCount > 0 ? "Needs your review" : "", icon: AlertCircle, onClick: () => setDrilldown("Pending Requests") } as any,
+        { label: "Today's Classes", value: "-", hint: "No class schedule set up yet", icon: CalendarDays } as any,
       ]}
+      banner={{ ...(banner as any), openTimeToday: openTimeToday || "No open time today" }}
       name={name}
       detail={detail}
       navItems={nav}
       active={view}
-      banner={banner}
       onNavigate={(next) => { setView(next); setDrilldown(null) }}
       onOpenAccount={onOpenAccount}
       onSignOut={onSignOut}

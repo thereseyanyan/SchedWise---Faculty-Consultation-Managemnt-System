@@ -178,7 +178,7 @@ export function FacultyTodayView() {
             ) : null}
           </div>
           <div className="-mx-5 mt-3 border-t border-divider" />
-          <div className="mt-4 flex items-center gap-2 rounded-[8px] bg-amber-tint/60 px-3 py-2 text-[12px] text-ink">
+          <div className="mt-3 flex items-center gap-2 rounded-[8px] bg-amber-tint/60 px-3 py-2 text-[12px] text-ink">
             <Info size={14} className="text-amber" />
             <span>Decline requires a written reason</span>
           </div>
@@ -209,7 +209,7 @@ export function FacultyTodayView() {
               visibleRequests.map((request, idx) => (
                 <div key={request.id} className="rounded-[12px] border border-divider p-4">
                   <div className="flex items-start gap-2">
-                    <span className="text-sm text-muted">{idx + 1}.</span>
+                    <span className="text-[12px] text-muted mt-0.5">{idx + 1}.</span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold text-ink">
                         {request.student_name} · Pending
@@ -227,7 +227,7 @@ export function FacultyTodayView() {
                     </div>
                   </div>
                   <div className="mt-3 flex flex-col gap-2">
-                    <div className="flex gap-2">
+                    <div className="flex gap-3">
                       <Button
                         disabled={actingId === request.id}
                         onClick={async () => {
@@ -308,7 +308,7 @@ export function FacultyTodayView() {
                     <button
                       key={appt.id}
                       type="button"
-                      className={`flex items-center gap-3 border-b border-divider px-1 py-3 text-left transition last:border-b-0 hover:bg-soft focus-visible:outline-2 focus-visible:outline-primary ${
+                      className={`flex items-center gap-3 border-b border-divider px-2 py-3 text-left transition last:border-b-0 hover:bg-soft focus-visible:outline-2 focus-visible:outline-primary ${
                         isPending ? "bg-amber-tint/40" : ""
                       }`}
                     >

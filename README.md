@@ -207,6 +207,14 @@ SchedWise provides:
 - [x] Accept personal email domains and supplied Student IDs, send activation emails automatically on approval, and preserve IDs across schema setup.
 - [ ] Add the final logo SVG and enable BrandLogo showMark.
 
+### Pending backend work (UI already in place)
+
+These placeholders are intentionally non-functional so nobody assumes they work.
+
+- [ ] **Accepting requests toggle:** add a column (for example `faculty_accepting_requests TINYINT(1) DEFAULT 1` on the faculty profile/user), faculty-only update endpoint with CSRF, ownership check and audit entry; enforce it in `POST /appointments/index.php` (reject with a clear 409/422 message when off) and hide the faculty's slots in `GET /faculty/slots.php`; add it to `database.sql` and the idempotent `tools/setup-database.php` migration; API regression tests; then enable the sidebar toggle (currently disabled placeholder).
+- [ ] **Faculty classes:** add a `faculty_classes` table (id, faculty_id, course_code, title, room, weekday, start/end minutes, term start/end dates, timestamps), faculty-owned CRUD endpoint with CSRF/ownership/audit, decide whether classes block bookable slots (recommended: yes, same half-open interval rule), migration and tests; then render class bars in Today's schedule, class dots in the calendar, the Today's Classes number/helper, and the greeting subtitle count.
+- [ ] **Open time today:** currently computed in the frontend from availability, overrides and appointments (sidebar only); consider a server-side endpoint if it must match booking rules exactly or include classes.
+
 #### P1 — next quality pass
 
 - [x] Expand the committed browser smoke test to privacy placement, dashboard card navigation, student approvals and faculty initial password changes, and the purple theme. The current test covers inline validation, sign-out cancel/accept, admin login/search, appointment filters, report filters/export, the Audit Log view, and seeded role routing.

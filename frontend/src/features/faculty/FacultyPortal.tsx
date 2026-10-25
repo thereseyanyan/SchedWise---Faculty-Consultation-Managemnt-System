@@ -155,10 +155,10 @@ export function FacultyPortal({
     <PortalShell
       role="Faculty"
       stats={[
-        { label: "Today", value: String(todayCount), hint: undefined, icon: Clock3, onClick: () => setDrilldown("Today") },
-        { label: "Consultations", value: String(appointments.filter(a => a.status === 'confirmed').length), hint: undefined, icon: CalendarClock, onClick: () => setDrilldown("All") },
-        { label: "Pending Requests", value: String(pendingCount), hint: pendingCount > 0 ? "Needs your review" : undefined, icon: AlertCircle, onClick: () => setDrilldown("Pending Requests") },
-        { label: "Completed This Month", value: String(completedCount), hint: undefined, icon: CheckCircle2, onClick: () => setDrilldown("Completed") },
+        { label: "Today", value: String(todayCount), hint: "", icon: Clock3, onClick: () => setDrilldown("Today") },
+        { label: "Today's Consultations", value: String(appointments.filter(a => a.status === 'confirmed').length), hint: "", icon: CalendarClock, onClick: () => setDrilldown("All") },
+        { label: "Pending Requests", value: String(pendingCount), hint: pendingCount > 0 ? "Needs your review" : "", icon: AlertCircle, onClick: () => setDrilldown("Pending Requests") },
+        { label: "Completed This Month", value: String(completedCount), hint: "", icon: CheckCircle2, onClick: () => setDrilldown("Completed") },
       ]}
       name={name}
       detail={detail}

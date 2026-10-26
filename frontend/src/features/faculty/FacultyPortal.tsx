@@ -15,10 +15,11 @@ import { FacultyAvailabilityView } from "./FacultyAvailabilityView"
 import { FacultyPortalShell } from "./FacultyPortalShell"
 import { FacultyRecordsView } from "./FacultyRecordsView"
 import { FacultyTodayView } from "./FacultyTodayView"
-import { openTimeTodayLabel, todayOpenTime } from "./facultyCalendar"
+import { openTimeTodayLabel, startOfLocaleWeek, todayOpenTime } from "./facultyCalendar"
 import {
   Button,
   CurrentUserContext,
+  addDays,
   fullName,
   toIso,
   useAppointments,
@@ -63,9 +64,15 @@ export function FacultyPortal({
   const name = fullName(currentUser?.first_name, currentUser?.last_name, currentUser?.email ?? "Faculty")
   const facultyNumber = currentUser?.faculty_number
   const department = (currentUser as any)?.department
-  const today = toIso(new Date())
+  const now = new Date()
+  const today = toIso(now)
+  const weekStartDate = startOfLocaleWeek(now)
+  const weekStart = toIso(weekStartDate)
+  const weekEnd = toIso(addDays(weekStartDate, 6))
   const facultyId = currentUser?.id ?? ""
   const todayCount = appointments.filter((a) => a.date === today && a.status !== "cancelled").length
+  const todayConfirmedCount = appointments.filter((a) => a.date === today && a.status === "confirmed").length
+  const weeklyConfirmedCount = appointments.filter((a) => a.status === "confirmed" && a.date >= weekStart && a.date <= weekEnd).length
   const pendingCount = appointments.filter((a) => ["pending", "reschedule_requested"].includes(a.status)).length
   const completedCount = appointments.filter((a) => a.status === "completed").length
   const detailParts = []
@@ -175,9 +182,9 @@ export function FacultyPortal({
       role="Faculty"
       stats={[
         { label: "Today", value: String(todayCount), hint: "", icon: Clock3, onClick: () => setDrilldown("Today") } as any,
-        { label: "Today's Consultations", value: String(appointments.filter(a => a.status === 'confirmed').length), hint: appointments.filter(a => a.status === 'confirmed').length > 0 ? `${appointments.filter(a => a.status === 'confirmed').length} confirmed` : "", icon: CalendarClock, onClick: () => setDrilldown("All") } as any,
+        { label: "Today's Consultations", value: String(todayConfirmedCount), hint: todayConfirmedCount > 0 ? `${todayConfirmedCount} confirmed` : "", icon: CalendarClock, onClick: () => setDrilldown("Today") } as any,
         { label: "Pending Requests", value: String(pendingCount), hint: pendingCount > 0 ? "Needs your review" : "", icon: AlertCircle, onClick: () => setDrilldown("Pending Requests") } as any,
-        { label: "Today's Classes", value: "-", hint: "No class schedule set up yet", icon: CalendarDays } as any,
+        { label: "Consultations for this week", value: String(weeklyConfirmedCount), hint: "Scheduled this week", icon: CalendarDays } as any,
       ]}
       banner={banner}
       openTimeToday={openTimeToday || "No open time today"}

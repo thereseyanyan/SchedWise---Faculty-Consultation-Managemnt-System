@@ -26,6 +26,24 @@ export const timeOptions = Array.from(
 
 export const cardShadow = "border border-slate-200 shadow-[0_1px_3px_rgba(0,0,0,0.05)]"
 
+const localeWeekStart = (() => {
+  try {
+    const locale = new Intl.Locale(Intl.DateTimeFormat().resolvedOptions().locale) as Intl.Locale & {
+      weekInfo?: { firstDay?: number }
+      getWeekInfo?: () => { firstDay?: number }
+    }
+    const firstDay = locale.weekInfo?.firstDay ?? locale.getWeekInfo?.().firstDay
+    if (typeof firstDay === "number" && firstDay >= 1 && firstDay <= 7) return firstDay % 7
+  } catch {
+    // Fall back to Monday for environments without Intl.Locale week info.
+  }
+  return 1
+})()
+
+export function startOfLocaleWeek(date: Date): Date {
+  return addDays(date, -((date.getDay() - localeWeekStart + 7) % 7))
+}
+
 export function monthGridDates(anchor: Date): Date[] {
   const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1)
   const gridStart = startOfWeek(first)

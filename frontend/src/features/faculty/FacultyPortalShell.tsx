@@ -1,8 +1,17 @@
-import type { CSSProperties, ReactNode } from "react"
-import { Clock3, LogOut, Settings } from "lucide-react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import type { CSSProperties, KeyboardEvent, ReactNode } from "react"
+import { Clock3, LogOut, Search, Settings, X } from "lucide-react"
 import { BrandLogo } from "../../shared/BrandLogo"
 import { NotificationsButton } from "../../shared/NotificationsButton"
 import type { Icon, Role, Stat } from "../../shared/types"
+
+type SearchTarget = {
+  label: string
+  hint: string
+  icon: Icon
+  keywords: string
+  run: () => void
+}
 
 function getGreeting() {
   const hour = new Date().getHours()
@@ -63,6 +72,90 @@ export function FacultyPortalShell({
   const greetingName = lastName ? `Prof. ${lastName}` : name
   const dateChip = getDateChip()
   const subtitle = detail && detail.trim() ? detail.trim() : null
+  const [search, setSearch] = useState("")
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(0)
+  const searchRef = useRef<HTMLDivElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+
+  const searchTargets = useMemo<SearchTarget[]>(() => {
+    const targets: SearchTarget[] = navItems.map((item) => ({
+      label: item.label,
+      hint: "Faculty section",
+      icon: item.icon,
+      keywords: `${item.label} section navigate`,
+      run: () => onNavigate(item.label),
+    }))
+    for (const stat of stats) {
+      targets.push({
+        label: stat.label,
+        hint: "Dashboard shortcut",
+        icon: stat.icon,
+        keywords: `${stat.label} ${stat.hint} dashboard summary`,
+        run: stat.onClick,
+      })
+    }
+    targets.push(
+      {
+        label: "Account settings",
+        hint: "Profile and security",
+        icon: Settings,
+        keywords: "account settings profile password security",
+        run: onOpenAccount,
+      },
+      {
+        label: "Sign out",
+        hint: "End this session",
+        icon: LogOut,
+        keywords: "sign out logout exit",
+        run: onSignOut,
+      },
+    )
+    return targets
+  }, [navItems, stats, onNavigate, onOpenAccount, onSignOut])
+
+  const searchQuery = search.trim().toLowerCase()
+  const searchResults = searchQuery
+    ? searchTargets
+        .filter((target) => `${target.label} ${target.hint} ${target.keywords}`.toLowerCase().includes(searchQuery))
+        .slice(0, 6)
+    : []
+
+  useEffect(() => {
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!searchRef.current?.contains(event.target as Node)) setSearchOpen(false)
+    }
+    document.addEventListener("mousedown", handlePointerDown)
+    return () => document.removeEventListener("mousedown", handlePointerDown)
+  }, [])
+
+  const runSearchTarget = (target: SearchTarget) => {
+    setSearch("")
+    setSearchOpen(false)
+    setActiveIndex(0)
+    searchInputRef.current?.blur()
+    target.run()
+  }
+
+  const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Escape") {
+      setSearchOpen(false)
+      setActiveIndex(0)
+      searchInputRef.current?.blur()
+      return
+    }
+    if (!searchOpen || searchResults.length === 0) return
+    if (event.key === "ArrowDown") {
+      event.preventDefault()
+      setActiveIndex((index) => (index + 1) % searchResults.length)
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault()
+      setActiveIndex((index) => (index - 1 + searchResults.length) % searchResults.length)
+    } else if (event.key === "Enter") {
+      event.preventDefault()
+      runSearchTarget(searchResults[activeIndex] ?? searchResults[0])
+    }
+  }
 
   return (
     <div
@@ -171,18 +264,113 @@ export function FacultyPortalShell({
       </aside>
 
       <div className="pl-[248px]">
-        <header className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-4 border-b border-divider bg-page-bg/95 px-6 py-4 backdrop-blur">
-          <div className="min-w-0">
-            <h1 className="font-[var(--font-display)] text-[28px] leading-[36px] text-ink">
+        <header className="sticky top-0 z-30 flex flex-wrap items-center gap-4 border-b border-divider bg-white/95 px-6 py-4 backdrop-blur">
+          <div className="min-w-0 flex-1 sm:min-w-[320px]">
+            <h1 className="font-[var(--font-display)] text-[28px] font-semibold leading-[36px] text-ink">
               {getGreeting()}, {greetingName}
             </h1>
-            {subtitle ? <p className="mt-1 text-sm text-muted">{subtitle}</p> : null}
+            {subtitle ? <p className="mt-1 text-sm font-medium text-muted">{subtitle}</p> : null}
           </div>
-          <div className="flex flex-wrap items-center gap-4 pr-6">
-            <span className="inline-flex items-center rounded-full bg-soft px-3 py-1.5 text-sm text-ink whitespace-nowrap">
+
+          <div ref={searchRef} className="relative order-3 w-full sm:order-2 sm:w-[320px] sm:flex-none">
+            <Search
+              size={16}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-primary"
+              aria-hidden="true"
+            />
+            <input
+              ref={searchInputRef}
+              type="text"
+              role="combobox"
+              aria-label="Search faculty portal"
+              aria-expanded={searchOpen && searchQuery.length > 0}
+              aria-controls="faculty-search-results"
+              aria-autocomplete="list"
+              aria-activedescendant={
+                searchOpen && searchResults[activeIndex] ? `faculty-search-option-${activeIndex}` : undefined
+              }
+              autoComplete="off"
+              spellCheck={false}
+              value={search}
+              placeholder="Search anything"
+              onChange={(event) => {
+                setSearch(event.target.value)
+                setActiveIndex(0)
+                setSearchOpen(true)
+              }}
+              onFocus={() => setSearchOpen(true)}
+              onBlur={(event) => {
+                if (!searchRef.current?.contains(event.relatedTarget as Node | null)) setSearchOpen(false)
+              }}
+              onKeyDown={handleSearchKeyDown}
+              className="h-10 w-full rounded-full border border-border-card bg-page-bg/70 pl-10 pr-9 text-sm font-medium text-ink outline-none transition placeholder:text-muted focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/15"
+            />
+            {search ? (
+              <button
+                type="button"
+                aria-label="Clear search"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  setSearch("")
+                  setActiveIndex(0)
+                  setSearchOpen(false)
+                  searchInputRef.current?.focus()
+                }}
+                className="absolute right-2.5 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-full text-muted transition hover:bg-soft hover:text-ink focus-visible:outline-2 focus-visible:outline-primary"
+              >
+                <X size={14} />
+              </button>
+            ) : null}
+
+            {searchOpen && searchQuery.length > 0 ? (
+              <div
+                id="faculty-search-results"
+                role="listbox"
+                aria-label="Faculty search results"
+                className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 overflow-hidden rounded-[14px] border border-border-card bg-white p-1.5 shadow-[0_16px_40px_rgba(45,27,105,0.16)]"
+              >
+                {searchResults.length > 0 ? (
+                  searchResults.map(({ label, hint, icon: ResultIcon }, index) => (
+                    <button
+                      key={`${label}-${index}`}
+                      id={`faculty-search-option-${index}`}
+                      type="button"
+                      role="option"
+                      aria-selected={index === activeIndex}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onMouseEnter={() => setActiveIndex(index)}
+                      onClick={() => runSearchTarget(searchResults[index])}
+                      className={`flex w-full items-center gap-3 rounded-[10px] px-3 py-2 text-left transition ${
+                        index === activeIndex ? "bg-soft" : "hover:bg-soft/70"
+                      }`}
+                    >
+                      <span
+                        className={`flex size-8 shrink-0 items-center justify-center rounded-lg ${
+                          index === activeIndex ? "bg-white text-primary" : "bg-soft text-primary"
+                        }`}
+                      >
+                        <ResultIcon size={16} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold text-ink">{label}</span>
+                        <span className="block truncate text-xs text-muted">{hint}</span>
+                      </span>
+                    </button>
+                  ))
+                ) : (
+                  <p role="status" className="px-3 py-4 text-sm text-muted">
+                    No matching section or action.
+                  </p>
+                )}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="order-2 flex flex-wrap items-center gap-3 sm:order-3">
+            <span className="inline-flex items-center rounded-full bg-soft px-3 py-1.5 text-sm font-medium text-ink whitespace-nowrap">
               {dateChip}
             </span>
-            <div className="relative">
+            <div className="relative [&>button]:!border-border-card [&>button]:!bg-white [&>button]:!text-primary [&>button:hover]:!bg-soft [&>button:hover]:!text-primary [&>button:focus-visible]:!ring-primary/40 [&>button>svg]:!size-5">
               <NotificationsButton />
             </div>
             <div className="flex items-center gap-2.5 rounded-full border border-border-card bg-white px-3 py-1.5 shadow-[0_1px_2px_rgba(45,27,105,0.06)]">
@@ -198,7 +386,7 @@ export function FacultyPortalShell({
         </header>
         <main className="mx-auto max-w-[1120px] px-6 py-6">
           {banner ? <div className="mt-6">{banner}</div> : null}
-          <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             {stats.map(({ label, value, hint, icon: IconComponent, onClick, attention }) => {
               const interactive = typeof onClick === "function"
               if (interactive) {
@@ -216,9 +404,9 @@ export function FacultyPortalShell({
                         <IconComponent size={16} />
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className="text-[12px] font-semibold uppercase tracking-[0.05em] text-muted truncate">{label}</p>
+                        <p className="break-words text-[12px] font-semibold uppercase leading-[16px] tracking-[0.05em] text-muted">{label}</p>
                         <p className="mt-1 font-[var(--font-display)] text-[36px] leading-[40px] font-bold text-ink">{value}</p>
-                        {hint ? <p className="mt-1 text-sm text-muted truncate">{hint}</p> : null}
+                        {hint ? <p className="mt-1 break-words text-sm text-muted">{hint}</p> : null}
                       </div>
                     </div>
                   </button>
@@ -236,9 +424,9 @@ export function FacultyPortalShell({
                       <IconComponent size={16} />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[12px] font-semibold uppercase tracking-[0.05em] text-muted truncate">{label}</p>
+                      <p className="break-words text-[12px] font-semibold uppercase leading-[16px] tracking-[0.05em] text-muted">{label}</p>
                       <p className="mt-1 font-[var(--font-display)] text-[36px] leading-[40px] font-bold text-ink">{value}</p>
-                      {hint ? <p className="mt-1 text-sm text-muted truncate">{hint}</p> : null}
+                      {hint ? <p className="mt-1 break-words text-sm text-muted">{hint}</p> : null}
                     </div>
                   </div>
                 </div>

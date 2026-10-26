@@ -5,7 +5,7 @@ import { RoleCard, FeaturePill } from "./RoleCard"
 
 type WelcomePageProps = {
   onSignUp: (role: "student" | "faculty") => void
-  onLogin: () => void
+  onLogin: (role: "student" | "faculty") => void
 }
 
 export function WelcomePage({ onSignUp, onLogin }: WelcomePageProps) {
@@ -137,7 +137,7 @@ export function WelcomePage({ onSignUp, onLogin }: WelcomePageProps) {
                           Sign Up as a Student
                         </Button>}
                         <Button
-                          onClick={onLogin}
+                          onClick={() => selectedRole && onLogin(selectedRole)}
                           className="w-full rounded-[999px] border border-schedwise-purple/70 px-8 py-3 text-sm font-semibold text-schedwise-purple transition hover:bg-schedwise-lavender-100 focus-visible:ring-2 focus-visible:ring-schedwise-purple sm:w-auto"
                         >
                           Login

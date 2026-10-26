@@ -15,8 +15,8 @@ export function BrandLogo({ className = "", showMark = false }: BrandLogoProps) 
         </div>
       ) : null}
       <span className="font-display text-xl font-bold tracking-tight sm:text-2xl">
-        <span className="text-schedwise-purple">Sched</span>
-        <span className="text-schedwise-yellow">Wise</span>
+        <span className="text-primary">Sched</span>
+        <span className="text-amber">Wise</span>
       </span>
     </div>
   )

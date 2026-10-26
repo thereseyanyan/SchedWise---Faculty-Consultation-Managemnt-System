@@ -394,6 +394,7 @@ Generated folders such as `frontend/node_modules`, `frontend/dist`, and `.runtim
 - Reschedule their own appointments. Cancelling requires a written reason and confirmation.
 - Create consultation records for their completed appointments. Once saved, the calendar form is read-only; the complete record, including private notes, remains available in **Consultation Records**.
 - Read their notification inbox from the header.
+- See the four most recent notifications on the Faculty Dashboard, mark one or all as read without leaving the page, and open the full inbox from the card.
 - Cannot read another faculty member's private notes through the API.
 
 ### Administrator
@@ -936,7 +937,7 @@ Use this before handing the project to someone:
 - [ ] A backup can be created and restored after stopping the app.
 - [ ] Stopping via `STOP SchedWise` closes ports 8000, 5173, and 1025/8025 (Mailpit), leaving MySQL running.
 
-**Last verified:** 2026-10-22 — student self-service, notification, and consultation-feedback pass completed. PHP syntax checks passed for every PHP file in `backend`, `tools`, and `tests`; `npx tsc --noEmit` and the Vite production build passed; the API regression suite passed 16/16 tests, including shared-summary embedding with private notes excluded; the client CSRF suite passed 4/4 tests; and the committed Playwright browser smoke test passed 1/1 against headless Brave (privacy placement, purple-theme styling, dashboard card navigation, faculty registration with Mailpit verification, administrator approval, notification inbox/mark-all-read, sign-out cancellation, admin user search, appointment filters, student cancel/reschedule, consultation feedback, Audit Log filtering, report filters/export, role routing, zero page exceptions). Test cleanup left no `e2e.*` accounts or test-created appointments/overrides; the intentional non-test local account and its demo data were left untouched, and the clean seed still provides 10 availability rows. The pre-migration database backup is at `.runtime/backups/pre-schedwise-migration.sql`. Desktop shortcuts remain `SchedWise.lnk` and `STOP SchedWise.lnk`.
+**Last verified:** 2026-10-26 — faculty dashboard recent-notifications card. `npx tsc --noEmit` and `npm run build` passed. A headless Chrome run confirmed the four newest notifications, unread styling, row mark-read, mark-all-read, header badge refresh, footer inbox open, loading/error/retry/empty states, and no card overflow at 1920x1080, 1440x900, 1366x768, 1024x768, and 375x667. Temporary `verifyrn.*` notification rows were removed after the test. The committed `npm run test:browser` smoke test could not run because the local SMTP fixture safety check in `tests/check-mail-fixture.php` requires port 1025 and local debug mode; it remains pending. Prior full pass (2026-10-22): student self-service, notification, and consultation-feedback pass completed. PHP syntax checks passed for every PHP file in `backend`, `tools`, and `tests`; `npx tsc --noEmit` and the Vite production build passed; the API regression suite passed 16/16 tests, including shared-summary embedding with private notes excluded; the client CSRF suite passed 4/4 tests; and the committed Playwright browser smoke test passed 1/1 against headless Brave (privacy placement, purple-theme styling, dashboard card navigation, faculty registration with Mailpit verification, administrator approval, notification inbox/mark-all-read, sign-out cancellation, admin user search, appointment filters, student cancel/reschedule, consultation feedback, Audit Log filtering, report filters/export, role routing, zero page exceptions). Test cleanup left no `e2e.*` accounts or test-created appointments/overrides; the intentional non-test local account and its demo data were left untouched, and the clean seed still provides 10 availability rows. The pre-migration database backup is at `.runtime/backups/pre-schedwise-migration.sql`. Desktop shortcuts remain `SchedWise.lnk` and `STOP SchedWise.lnk`.
 
 ---
 
@@ -1044,6 +1045,22 @@ Known risk areas:
 ---
 
 ## 15. Change Log
+
+### 2026-10-26
+
+#### Faculty dashboard recent notifications
+
+- Added `frontend/src/features/faculty/RecentNotificationsCard.tsx` and rendered it below the existing cards in `FacultyTodayView.tsx`. The card shows the four newest notifications from the existing notifications API, with type-based icons, relative time, unread background/left edge, loading skeletons, empty and error/retry states, and a `See all notifications` footer that opens the existing header inbox.
+- Row clicks mark one notification read; `Mark all read` clears every unread notification. Both paths use the existing API, update the card optimistically, then refresh the header badge through the existing focus event.
+- The card uses existing palette tokens and the shared card radius/shadow. Above 640px it keeps the 20px padding, full-width divider, and fixed 72px time column. At 375px the pre-existing fixed 248px faculty sidebar leaves the card about 62px wide, so the card switches to a compact stacked layout to keep its content inside its own boundary; changing the shell's mobile behavior is outside this card's scope.
+- Verified with `npx tsc --noEmit` and `npm run build`. A headless Chrome run against real API data confirmed ordering, unread styling, row mark-read, mark-all-read, badge refresh, persisted read state after reload, footer inbox open, loading/error/retry/empty states, Student/Admin dashboards unchanged, and no card overflow at 1920x1080, 1440x900, 1366x768, 1024x768, and 375x667. Temporary `verifyrn.*` notification rows were deleted after the run. The committed `npm run test:browser` smoke test remains blocked by its local SMTP fixture safety check (port 1025 plus local debug mode).
+
+#### Student and Admin dashboards restored to their original UI
+
+- Moved the sidebar dashboard shell introduced by the Faculty redesign into `frontend/src/features/faculty/FacultyPortalShell.tsx`. The shared `PortalShell` in `frontend/src/shared/ui.tsx` is back to the original wave-header layout used by Student and Admin.
+- Faculty keeps the sidebar shell, greeting, open-time chip, and "Accepting requests" placeholder; only the Faculty portal imports the new shell.
+- Scoped the shared `Button` keyboard focus ring through `--focus-ring` so Student/Admin keep the original purple-500 ring while the Faculty shell uses the primary token. No other shared style values changed.
+- Verified with `npx tsc --noEmit` and `npm run build`, plus a headless browser check at 1920x1080, 1440x900, 1366x768, 1024x768, and 375x667: Student/Admin contain no sidebar markup or "Accepting requests"/"Coming soon" text, Faculty retains them, and Student/Admin have no horizontal overflow.
 
 ### 2026-10-22
 

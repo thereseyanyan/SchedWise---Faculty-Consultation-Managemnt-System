@@ -55,6 +55,7 @@ html {
   scrollbar-gutter: stable;
   background: var(--color-schedwise-lavender-50);
   color: var(--color-schedwise-body);
+  --focus-ring: var(--color-purple-500);
 }
 
 @supports not (scrollbar-gutter: stable) {

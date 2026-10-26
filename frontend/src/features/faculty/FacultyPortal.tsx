@@ -12,12 +12,12 @@ import {
 } from "lucide-react"
 import { AppointmentListView } from "../appointments/AppointmentListView"
 import { FacultyAvailabilityView } from "./FacultyAvailabilityView"
+import { FacultyPortalShell } from "./FacultyPortalShell"
 import { FacultyRecordsView } from "./FacultyRecordsView"
 import { FacultyTodayView } from "./FacultyTodayView"
 import {
   Button,
   CurrentUserContext,
-  PortalShell,
   fullName,
   toIso,
   useAppointments,
@@ -188,7 +188,7 @@ export function FacultyPortal({
   )
 
   return (
-    <PortalShell
+    <FacultyPortalShell
       role="Faculty"
       stats={[
         { label: "Today", value: String(todayCount), hint: "", icon: Clock3, onClick: () => setDrilldown("Today") } as any,
@@ -196,7 +196,8 @@ export function FacultyPortal({
         { label: "Pending Requests", value: String(pendingCount), hint: pendingCount > 0 ? "Needs your review" : "", icon: AlertCircle, onClick: () => setDrilldown("Pending Requests") } as any,
         { label: "Today's Classes", value: "-", hint: "No class schedule set up yet", icon: CalendarDays } as any,
       ]}
-      banner={{ ...(banner as any), openTimeToday: openTimeToday || "No open time today" }}
+      banner={banner}
+      openTimeToday={openTimeToday || "No open time today"}
       name={name}
       detail={detail}
       navItems={nav}
@@ -218,6 +219,6 @@ export function FacultyPortal({
       {!drilldown && (view === "Calendar & Availability" || view === "Set Availability") && <FacultyAvailabilityView />}
       {!drilldown && (view === "Consultation Records" || view === "Student Records") && <FacultyRecordsView />}
       {!drilldown && view === "Notifications" && <AppointmentListView filter="All" />}
-    </PortalShell>
+    </FacultyPortalShell>
   )
 }

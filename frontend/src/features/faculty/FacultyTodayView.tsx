@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react"
 import { AlertCircle, CalendarDays, CheckCircle2, Clock3, Info, X } from "lucide-react"
 import { appointmentApi, type Appointment } from "../../api"
 import { confirmAction } from "../../confirmation"
+import { RecentNotificationsCard } from "./RecentNotificationsCard"
 import {
   Avatar,
   Button,
@@ -339,7 +340,7 @@ export function FacultyTodayView() {
           ) : null}
         </section>
       </div>
-      <div className="mt-6" />
+      <RecentNotificationsCard />
       {declineTarget && (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-[rgba(45,27,105,0.30)] p-0 backdrop-blur-[6px] sm:items-center sm:p-6"

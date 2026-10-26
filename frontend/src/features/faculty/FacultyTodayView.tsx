@@ -2,13 +2,16 @@ import { useEffect, useState, type FormEvent } from "react"
 import { AlertCircle, CalendarDays, CheckCircle2, Clock3, Info, X } from "lucide-react"
 import { appointmentApi, type Appointment } from "../../api"
 import { confirmAction } from "../../confirmation"
+import { AppointmentPanel } from "./AppointmentPanels"
 import { DashboardCalendarCard } from "./DashboardCalendarCard"
 import { RecentNotificationsCard } from "./RecentNotificationsCard"
+import { TodayScheduleCard } from "./TodayScheduleCard"
 import {
   Avatar,
   Button,
   FieldError,
   TextareaTag,
+  applyAppointmentPatch,
   errorMessage,
   formatDate,
   fullName,
@@ -16,6 +19,7 @@ import {
   pillField,
   pillLabel,
   toIso,
+  toUiAppointment,
 } from "../../shared"
 
 type IncomingRequest = {
@@ -71,6 +75,7 @@ export function FacultyTodayView() {
   const [declineTarget, setDeclineTarget] = useState<IncomingRequest | null>(null)
   const [declineReason, setDeclineReason] = useState("")
   const [declineError, setDeclineError] = useState("")
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null)
 
   const loadData = async () => {
     setLoading(true)
@@ -157,6 +162,9 @@ export function FacultyTodayView() {
   const moreRequests = requests.length - visibleRequests.length
   const visibleUpcoming = upcoming.slice(0, 3)
   const moreUpcoming = upcoming.length - visibleUpcoming.length
+  const selectedAppointment = selectedAppointmentId
+    ? calendarAppointments.find((appointment) => appointment.id === selectedAppointmentId) ?? null
+    : null
 
   const getStatusChip = (status: string) => {
     if (status === "confirmed") return { label: "Confirmed", className: "bg-green-tint text-green" }
@@ -363,6 +371,56 @@ export function FacultyTodayView() {
           <RecentNotificationsCard />
         </div>
       </div>
+      <div className="mb-6 min-w-0">
+        <TodayScheduleCard
+          appointments={calendarAppointments}
+          loading={loading}
+          error={error}
+          onRetry={loadData}
+          onOpenAppointment={(appointment) => setSelectedAppointmentId(appointment.id)}
+        />
+      </div>
+      {selectedAppointment && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-[rgba(45,27,105,0.30)] p-0 backdrop-blur-[6px] sm:items-center sm:p-6"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setSelectedAppointmentId(null)
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Appointment details"
+            className="max-h-[90vh] w-[calc(100%-32px)] max-w-[440px] overflow-y-auto"
+          >
+            <AppointmentPanel
+              key={`today-${selectedAppointment.id}`}
+              appointment={toUiAppointment(selectedAppointment)}
+              onClose={() => setSelectedAppointmentId(null)}
+              onUpdate={async (patch) => {
+                await applyAppointmentPatch(toUiAppointment(selectedAppointment), patch)
+                await loadData()
+              }}
+              onCancel={async (reason) => {
+                const updated = await appointmentApi.cancel(selectedAppointment.id, reason)
+                mergeAppointment(updated)
+                await loadData()
+                setSelectedAppointmentId(null)
+              }}
+              hasClash={(iso, start, end) =>
+                calendarAppointments.some(
+                  (appointment) =>
+                    appointment.id !== selectedAppointment.id &&
+                    appointment.status !== "cancelled" &&
+                    appointment.appointment_date === iso &&
+                    appointment.start_minutes < end &&
+                    start < appointment.end_minutes,
+                )
+              }
+            />
+          </div>
+        </div>
+      )}
       {declineTarget && (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-[rgba(45,27,105,0.30)] p-0 backdrop-blur-[6px] sm:items-center sm:p-6"

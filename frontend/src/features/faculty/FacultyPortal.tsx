@@ -15,6 +15,7 @@ import { FacultyAvailabilityView } from "./FacultyAvailabilityView"
 import { FacultyPortalShell } from "./FacultyPortalShell"
 import { FacultyRecordsView } from "./FacultyRecordsView"
 import { FacultyTodayView } from "./FacultyTodayView"
+import { openTimeTodayLabel, todayOpenTime } from "./facultyCalendar"
 import {
   Button,
   CurrentUserContext,
@@ -97,32 +98,14 @@ export function FacultyPortal({
   }, [appointments, today])
 
   const openTimeToday = useMemo(() => {
-    const dow = new Date().getDay()
-    let free = 0
-    for (const a of availability) {
-      if (!a.active) continue
-      if (a.weekday !== dow) continue
-      free += Math.max(0, a.end_minutes - a.start_minutes)
-    }
-    for (const o of overrides) {
-      if (o.date !== today) continue
-      if (o.kind === "blocked") {
-        free -= Math.max(0, (o.end_minutes ?? 0) - (o.start_minutes ?? 0))
-      } else if (o.kind === "available") {
-        free += Math.max(0, (o.end_minutes ?? 0) - (o.start_minutes ?? 0))
-      }
-    }
-    if (free < 0) free = 0
-    const busy = appointments
-      .filter((a) => a.date === today && ["pending", "confirmed", "reschedule_requested"].includes(a.status))
-      .reduce((sum, a) => sum + Math.max(0, (a.end ?? (a.start_minutes + 30)) - a.start_minutes), 0)
-    let open = free - busy
-    if (open <= 0) return null
-    const h = Math.floor(open / 60)
-    const m = open % 60
-    if (h > 0 && m > 0) return `${h}h ${m}m of open time today`
-    if (h > 0) return `${h}h of open time today`
-    return `${m}m of open time today`
+    const { minutes } = todayOpenTime(
+      availability,
+      overrides,
+      appointments,
+      today,
+      new Date().getDay(),
+    )
+    return openTimeTodayLabel(minutes)
   }, [availability, overrides, appointments, today])
 
   const nav = [

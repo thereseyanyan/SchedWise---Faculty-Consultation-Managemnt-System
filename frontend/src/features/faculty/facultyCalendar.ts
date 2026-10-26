@@ -1,3 +1,5 @@
+import { addDays, startOfWeek } from "../../shared"
+
 export const HOUR_PX = 56
 export const DAY_START = 7 * 60
 export const DAY_END = 18 * 60
@@ -22,3 +24,11 @@ export const timeOptions = Array.from(
 )
 
 export const cardShadow = "border border-slate-200 shadow-[0_1px_3px_rgba(0,0,0,0.05)]"
+
+export function monthGridDates(anchor: Date): Date[] {
+  const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1)
+  const gridStart = startOfWeek(first)
+  const daysInMonth = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0).getDate()
+  const weeks = Math.ceil((((first.getDay() + 6) % 7) + daysInMonth) / 7)
+  return Array.from({ length: weeks * 7 }, (_, index) => addDays(gridStart, index))
+}

@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react"
 import { AlertCircle, CalendarDays, CheckCircle2, Clock3, Info, X } from "lucide-react"
 import { appointmentApi, type Appointment } from "../../api"
 import { confirmAction } from "../../confirmation"
+import { DashboardCalendarCard } from "./DashboardCalendarCard"
 import { RecentNotificationsCard } from "./RecentNotificationsCard"
 import {
   Avatar,
@@ -63,6 +64,7 @@ function formatDateLabel(dateStr: string) {
 export function FacultyTodayView() {
   const [requests, setRequests] = useState<IncomingRequest[]>([])
   const [upcoming, setUpcoming] = useState<Appointment[]>([])
+  const [calendarAppointments, setCalendarAppointments] = useState<Appointment[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [actingId, setActingId] = useState("")
@@ -104,10 +106,12 @@ export function FacultyTodayView() {
 
       setRequests(pendingRequests)
       setUpcoming(upcomingList)
+      setCalendarAppointments(appointments)
     } catch (err) {
       setError(errorMessage(err, "Failed to load appointments"))
       setRequests([])
       setUpcoming([])
+      setCalendarAppointments([])
     } finally {
       setLoading(false)
     }
@@ -135,6 +139,9 @@ export function FacultyTodayView() {
     try {
       const rejected = await appointmentApi.reject(declineTarget.id, declineReason.trim())
       mergeAppointment(rejected)
+      setCalendarAppointments((current) =>
+        current.map((appointment) => appointment.id === rejected.id ? rejected : appointment),
+      )
       setRequests((current) => current.filter((request) => request.id !== declineTarget.id))
       setUpcoming((current) => current.filter((appt) => appt.id !== declineTarget.id))
       setDeclineTarget(null)
@@ -238,6 +245,9 @@ export function FacultyTodayView() {
                           try {
                             const approved = await appointmentApi.approve(request.id)
                             mergeAppointment(approved)
+                            setCalendarAppointments((current) =>
+                              current.map((appointment) => appointment.id === approved.id ? approved : appointment),
+                            )
                             setRequests((prev) => prev.filter((req) => req.id !== request.id))
                             setUpcoming((prev) => [...prev, approved].sort((a, b) => (a.appointment_date === b.appointment_date ? a.start_minutes - b.start_minutes : a.appointment_date.localeCompare(b.appointment_date))))
                           } catch (err) {
@@ -340,7 +350,19 @@ export function FacultyTodayView() {
           ) : null}
         </section>
       </div>
-      <RecentNotificationsCard />
+      <div className="mt-6 mb-6 grid grid-cols-1 gap-4 lg:grid-cols-12 lg:items-stretch">
+        <div className="min-w-0 lg:col-span-8">
+          <DashboardCalendarCard
+            appointments={calendarAppointments}
+            loading={loading}
+            error={error}
+            onRetry={loadData}
+          />
+        </div>
+        <div className="min-w-0 lg:col-span-4 [&>section]:mt-0 [&>section]:h-full">
+          <RecentNotificationsCard />
+        </div>
+      </div>
       {declineTarget && (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-[rgba(45,27,105,0.30)] p-0 backdrop-blur-[6px] sm:items-center sm:p-6"

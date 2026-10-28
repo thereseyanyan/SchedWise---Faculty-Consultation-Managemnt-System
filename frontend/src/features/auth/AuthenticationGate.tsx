@@ -18,6 +18,7 @@ export function AuthenticationGate({ onLogin }: { onLogin: (user: User) => void 
   const [modalOpen, setModalOpen] = useState(initialVerifyToken ? true : false)
   const [modalMode, setModalMode] = useState<"login" | "signup">("login")
   const [initialRole, setInitialRole] = useState<"student" | "faculty">("student")
+  const [loginRole, setLoginRole] = useState<"student" | "faculty">("student")
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -90,7 +91,8 @@ export function AuthenticationGate({ onLogin }: { onLogin: (user: User) => void 
               setModalOpen(true)
               setScreen("welcome")
             }}
-            onLogin={() => {
+            onLogin={(role) => {
+              setLoginRole(role)
               setModalMode("login")
               setModalOpen(true)
               setScreen("welcome")
@@ -104,6 +106,7 @@ export function AuthenticationGate({ onLogin }: { onLogin: (user: User) => void 
           onSwitchMode={(m) => setModalMode(m)}
           onLoginSuccess={onLogin}
           initialRole={initialRole}
+          loginRole={loginRole}
         />
       </>
     )
@@ -131,28 +134,30 @@ export function AuthenticationGate({ onLogin }: { onLogin: (user: User) => void 
   return (
     <>
       <div className={modalOpen ? "transition-all duration-300" : "transition-all duration-300"}>
-        <WelcomePage
-          onSignUp={(role) => {
-            setInitialRole(role)
-            setModalMode("signup")
-            setModalOpen(true)
-            setScreen("welcome")
-          }}
-          onLogin={() => {
-            setModalMode("login")
-            setModalOpen(true)
-            setScreen("welcome")
-          }}
+          <WelcomePage
+            onSignUp={(role) => {
+              setInitialRole(role)
+              setModalMode("signup")
+              setModalOpen(true)
+              setScreen("welcome")
+            }}
+            onLogin={(role) => {
+              setLoginRole(role)
+              setModalMode("login")
+              setModalOpen(true)
+              setScreen("welcome")
+            }}
+          />
+        </div>
+        <AuthModals
+          open={modalOpen}
+          mode={modalMode}
+          onClose={() => setModalOpen(false)}
+          onSwitchMode={(m) => setModalMode(m)}
+          onLoginSuccess={onLogin}
+          initialRole={initialRole}
+          loginRole={loginRole}
         />
-      </div>
-      <AuthModals
-        open={modalOpen}
-        mode={modalMode}
-        onClose={() => setModalOpen(false)}
-        onSwitchMode={(m) => setModalMode(m)}
-        onLoginSuccess={onLogin}
-        initialRole={initialRole}
-      />
     </>
   )
 }

@@ -174,7 +174,7 @@ export function FacultyTodayView() {
   }
 
   return (
-    <div className="mt-6">
+    <div>
       {error && (
         <div className="mb-4 flex items-center justify-between rounded-[12px] border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">
           <span>Couldn't load appointments · Retry</span>
@@ -184,7 +184,7 @@ export function FacultyTodayView() {
         </div>
       )}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:items-stretch">
-        <section className="flex h-full flex-col rounded-[16px] border border-border-card bg-card p-5 shadow-[0_1px_2px_rgba(45,27,105,0.06)] lg:col-span-5">
+        <section className="flex h-full min-h-0 flex-col rounded-[16px] border border-border-card bg-card p-5 shadow-[0_1px_2px_rgba(45,27,105,0.06)] lg:col-span-5">
           <div className="flex items-center justify-between">
             <h2 className="font-[var(--font-display)] text-[18px] leading-[24px] font-semibold text-ink">Needs your response</h2>
             {requests.length > 0 ? (
@@ -198,7 +198,7 @@ export function FacultyTodayView() {
             <Info size={14} className="text-amber" />
             <span>Decline requires a written reason</span>
           </div>
-          <div className="mt-4 flex flex-1 flex-col gap-3">
+          <div className="mt-4 flex flex-1 min-h-0 flex-col gap-3">
             {loading ? (
               <>
                 {[0, 1].map((idx) => (
@@ -280,20 +280,20 @@ export function FacultyTodayView() {
                 </div>
               ))
             )}
+            {moreRequests > 0 ? (
+              <button type="button" className="mt-auto pt-2 text-center text-sm font-semibold text-primary">
+                View all ({requests.length})
+              </button>
+            ) : null}
           </div>
-          {moreRequests > 0 ? (
-            <button type="button" className="mt-3 text-center text-sm font-semibold text-primary">
-              View all ({requests.length})
-            </button>
-          ) : null}
         </section>
 
-        <section className="flex h-full flex-col rounded-[16px] border border-border-card bg-card p-5 shadow-[0_1px_2px_rgba(45,27,105,0.06)] lg:col-span-7">
+        <section className="flex h-full min-h-0 flex-col rounded-[16px] border border-border-card bg-card p-5 shadow-[0_1px_2px_rgba(45,27,105,0.06)] lg:col-span-7">
           <div className="flex items-center justify-between">
             <h2 className="font-[var(--font-display)] text-[18px] leading-[24px] font-semibold text-ink">Upcoming appointments</h2>
           </div>
           <div className="-mx-5 mt-3 border-t border-divider" />
-          <div className="mt-4 flex flex-1 flex-col">
+          <div className="mt-4 flex flex-1 min-h-0 flex-col">
             {loading ? (
               <div className="flex flex-col gap-2">
                 {[0, 1, 2].map((idx) => (
@@ -350,15 +350,15 @@ export function FacultyTodayView() {
                 })}
               </div>
             )}
+            {moreUpcoming > 0 ? (
+              <button type="button" className="mt-auto pt-2 text-center text-sm font-semibold text-primary">
+                View all ({upcoming.length})
+              </button>
+            ) : null}
           </div>
-          {moreUpcoming > 0 ? (
-            <button type="button" className="mt-3 text-center text-sm font-semibold text-primary">
-              View all ({upcoming.length})
-            </button>
-          ) : null}
         </section>
       </div>
-      <div className="mt-6 mb-6 grid grid-cols-1 gap-4 lg:grid-cols-12 lg:items-stretch">
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-12 lg:items-stretch">
         <div className="min-w-0 lg:col-span-8">
           <DashboardCalendarCard
             appointments={calendarAppointments}
@@ -371,7 +371,7 @@ export function FacultyTodayView() {
           <RecentNotificationsCard />
         </div>
       </div>
-      <div className="mb-6 min-w-0">
+      <div className="mt-4 min-w-0">
         <TodayScheduleCard
           appointments={calendarAppointments}
           loading={loading}

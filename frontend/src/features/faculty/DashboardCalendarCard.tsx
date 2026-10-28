@@ -59,7 +59,7 @@ export function DashboardCalendarCard({
   }
 
   return (
-    <section className="flex h-full flex-col rounded-[16px] border border-border-card bg-card p-5 shadow-card max-sm:p-1">
+    <section className="flex h-full min-h-0 flex-col rounded-[16px] border border-border-card bg-card p-5 shadow-card max-sm:p-1">
       <div className="flex items-center justify-between gap-3 max-sm:flex-col max-sm:items-start max-sm:gap-1">
         <h2 className="min-w-0 font-display text-[20px] leading-[28px] font-semibold text-ink max-sm:w-full max-sm:break-words">
           {monthTitle}
@@ -134,7 +134,7 @@ export function DashboardCalendarCard({
         </div>
       ) : (
         <>
-          <div className="mt-4 flex-1 overflow-x-auto">
+          <div className="mt-4 flex-1 min-h-0 overflow-x-auto">
             <div className="min-w-[360px]">
               <div className="grid grid-cols-7 gap-1">
                 {WEEKDAY_LABELS.map((label) => (

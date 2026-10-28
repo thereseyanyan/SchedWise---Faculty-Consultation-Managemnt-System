@@ -126,7 +126,7 @@ export function RecentNotificationsCard() {
   }
 
   return (
-    <section className="mt-6 w-full rounded-[16px] border border-border-card bg-card p-5 shadow-card max-sm:p-1">
+    <section className="mt-0 w-full h-full min-h-0 flex flex-col rounded-[16px] border border-border-card bg-card p-5 shadow-card max-sm:p-1">
       <div className="flex items-center justify-between gap-3 max-sm:flex-col max-sm:items-start max-sm:gap-1">
         <h2 className="min-w-0 font-[var(--font-display)] text-[18px] leading-[24px] font-semibold text-ink max-sm:w-full max-sm:break-words">
           Recent notifications
@@ -172,7 +172,7 @@ export function RecentNotificationsCard() {
           </p>
         </div>
       ) : visible.length === 0 ? (
-        <div className="mt-4 rounded-[12px] border border-dashed border-border-card bg-page-bg px-4 py-8 text-center max-sm:px-2">
+        <div className="mt-4 flex flex-1 min-h-0 flex-col items-center justify-center rounded-[12px] border border-dashed border-border-card bg-page-bg px-4 py-8 text-center max-sm:px-2">
           <span className="mx-auto flex size-8 items-center justify-center rounded-[8px] bg-soft text-primary">
             <Bell size={16} />
           </span>
@@ -182,7 +182,7 @@ export function RecentNotificationsCard() {
           </p>
         </div>
       ) : (
-        <div className="mt-4 flex flex-col gap-2">
+        <div className="mt-4 flex flex-1 min-h-0 flex-col gap-2">
           {visible.map((item) => {
             const Icon = iconForType(item.type)
             const unreadItem = !item.read_at
@@ -194,7 +194,7 @@ export function RecentNotificationsCard() {
                 disabled={saving}
                 aria-busy={saving}
                 onClick={() => { void markRead(item) }}
-                className={`flex w-full items-start gap-2 rounded-[12px] border border-divider p-3 text-left transition focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-wait max-sm:flex-wrap max-sm:p-1 ${
+                className={`flex w-full items-start gap-2 rounded-[12px] border border-divider p-4 text-left transition focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-wait max-sm:flex-wrap max-sm:p-1 ${
                   unreadItem
                     ? "border-l-[3px] border-l-primary bg-page-bg hover:bg-soft/60"
                     : "bg-card hover:bg-soft/40"
@@ -222,7 +222,7 @@ export function RecentNotificationsCard() {
         </p>
       ) : null}
 
-      <div className="mt-4 text-center">
+      <div className="mt-auto pt-4 text-center">
         <button
           type="button"
           onClick={openInbox}

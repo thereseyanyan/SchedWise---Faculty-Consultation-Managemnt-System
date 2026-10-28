@@ -124,7 +124,7 @@ export function FacultyPortal({
   ]
 
   const banner = (
-    <div className="flex flex-col gap-3 rounded-[16px] border border-border bg-soft p-5 md:flex-row md:items-center md:justify-between">
+    <div className="flex w-full flex-col gap-3 rounded-[16px] border border-border bg-soft p-5 md:flex-row md:items-center md:justify-between">
       {nextUp ? (
         <>
           <div className="flex min-w-0 items-start gap-4">
@@ -146,7 +146,7 @@ export function FacultyPortal({
               </p>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-3 whitespace-nowrap md:shrink-0">
+          <div className="flex items-center gap-3 whitespace-nowrap md:shrink-0">
             <button
               type="button"
               onClick={() => setDrilldown("Today")}

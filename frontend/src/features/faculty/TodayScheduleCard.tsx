@@ -17,15 +17,16 @@ import {
 import {
   DAY_END,
   DAY_START,
-  HOUR_PX,
   todayOpenTime,
   type TimeBlock,
 } from "./facultyCalendar"
 
+const TIMELINE_HOUR_PX = 48
+
 const MIN_BAR_PX = 40
 const BAR_GAP_PX = 6
-const MIN_BAR_MINUTES = (MIN_BAR_PX / HOUR_PX) * 60
-const OPEN_GAP_MINUTES = (2 / HOUR_PX) * 60
+const MIN_BAR_MINUTES = (MIN_BAR_PX / TIMELINE_HOUR_PX) * 60
+const OPEN_GAP_MINUTES = (2 / TIMELINE_HOUR_PX) * 60
 const ACTIVE_STATUSES = ["pending", "confirmed", "reschedule_requested"] as const
 
 type TodayScheduleCardProps = {
@@ -99,8 +100,8 @@ function layoutEvents(events: EventItem[], windowStart: number, windowEnd: numbe
     })
     const lanes = laneEnds.length
     for (const { item, lane } of assigned) {
-      const top = ((item.start - windowStart) / 60) * HOUR_PX
-      const bottom = ((Math.min(item.end, windowEnd) - windowStart) / 60) * HOUR_PX
+      const top = ((item.start - windowStart) / 60) * TIMELINE_HOUR_PX
+      const bottom = ((Math.min(item.end, windowEnd) - windowStart) / 60) * TIMELINE_HOUR_PX
       laidOut.push({
         ...item,
         top,
@@ -308,8 +309,8 @@ export function TodayScheduleCard({
     timelineAppointments.length > 0 || timelineOpenBlocks.length > 0
   const showNow =
     hasTimelineItems && nowMinutes >= windowBounds.start && nowMinutes <= windowBounds.end
-  const nowTop = ((nowMinutes - windowBounds.start) / 60) * HOUR_PX
-  const timelineHeight = ((windowBounds.end - windowBounds.start) / 60) * HOUR_PX
+  const nowTop = ((nowMinutes - windowBounds.start) / 60) * TIMELINE_HOUR_PX
+  const timelineHeight = ((windowBounds.end - windowBounds.start) / 60) * TIMELINE_HOUR_PX
   const hourMarks = []
   for (
     let minute = Math.ceil(windowBounds.start / 60) * 60;
@@ -319,9 +320,9 @@ export function TodayScheduleCard({
     hourMarks.push(minute)
   }
   const nearestHourTop = hourMarks.reduce((nearest, minute) => {
-    const top = ((minute - windowBounds.start) / 60) * HOUR_PX
+    const top = ((minute - windowBounds.start) / 60) * TIMELINE_HOUR_PX
     return Math.abs(top - nowTop) < Math.abs(nearest - nowTop) ? top : nearest
-  }, hourMarks[0] === undefined ? nowTop : ((hourMarks[0] - windowBounds.start) / 60) * HOUR_PX)
+  }, hourMarks[0] === undefined ? nowTop : ((hourMarks[0] - windowBounds.start) / 60) * TIMELINE_HOUR_PX)
   const minLabelGap = 6 + 6 + 8
   let nowLabelTop = nowTop
   if (Math.abs(nearestHourTop - nowTop) < minLabelGap) {
@@ -342,29 +343,27 @@ export function TodayScheduleCard({
       aria-labelledby="today-schedule-title"
       className="flex flex-col rounded-[16px] border border-border-card bg-card p-5 pb-4 shadow-card max-sm:p-2 max-sm:pb-4"
     >
-      <div className="overflow-x-auto">
-        <div className="min-w-[360px]">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <h2
-              id="today-schedule-title"
-              className="font-display text-[20px] leading-[28px] font-semibold text-ink"
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <h2
+            id="today-schedule-title"
+            className="font-display text-[20px] leading-[28px] font-semibold text-ink"
+          >
+            Today's schedule
+          </h2>
+          <div className="flex flex-wrap items-center gap-2 overflow-visible">
+            <span
+              className={`inline-flex h-7 items-center rounded-full px-2.5 text-[12px] font-semibold whitespace-nowrap ${
+                conflicts === 0
+                  ? "bg-green-tint text-green"
+                  : "bg-amber-tint text-amber"
+              }`}
             >
-              Today's schedule
-            </h2>
-            <div className="flex flex-wrap items-center gap-2">
-              <span
-                className={`inline-flex h-7 items-center rounded-full px-2.5 text-[12px] font-semibold whitespace-nowrap ${
-                  conflicts === 0
-                    ? "bg-green-tint text-green"
-                    : "bg-amber-tint text-amber"
-                }`}
-              >
-                {conflicts === 0 ? "No conflicts" : `${conflicts} conflict${conflicts === 1 ? "" : "s"}`}
-              </span>
-              <span className="inline-flex h-7 items-center rounded-full bg-soft px-2.5 text-[12px] font-semibold whitespace-nowrap text-muted">
-                Needs closing · {needsClosing}
-              </span>
-            </div>
+              {conflicts === 0 ? "No conflicts" : `${conflicts} conflict${conflicts === 1 ? "" : "s"}`}
+            </span>
+            <span className="inline-flex h-7 items-center rounded-full bg-soft px-2.5 text-[12px] font-semibold whitespace-nowrap text-muted">
+              Needs closing · {needsClosing}
+            </span>
           </div>
         </div>
       </div>
@@ -414,7 +413,7 @@ export function TodayScheduleCard({
               <div className="relative mt-4" style={{ height: timelineHeight }}>
                 <div className="absolute inset-y-0 left-0 w-14">
                   {hourMarks.map((minute) => {
-                    const top = ((minute - windowBounds.start) / 60) * HOUR_PX
+                    const top = ((minute - windowBounds.start) / 60) * TIMELINE_HOUR_PX
                     return (
                       <span
                         key={minute}
@@ -437,7 +436,7 @@ export function TodayScheduleCard({
 
                 <div className="absolute inset-y-0 left-14 right-0 border-l border-border-card">
                   {hourMarks.map((minute) => {
-                    const top = ((minute - windowBounds.start) / 60) * HOUR_PX
+                    const top = ((minute - windowBounds.start) / 60) * TIMELINE_HOUR_PX
                     return (
                       <div
                         key={`line-${minute}`}
@@ -448,8 +447,8 @@ export function TodayScheduleCard({
                   })}
 
                   {visibleOpenBlocks.map((block) => {
-                    const top = ((block.start - windowBounds.start) / 60) * HOUR_PX
-                    const height = ((block.end - block.start) / 60) * HOUR_PX
+                    const top = ((block.start - windowBounds.start) / 60) * TIMELINE_HOUR_PX
+                    const height = ((block.end - block.start) / 60) * TIMELINE_HOUR_PX
                     return (
                       <div
                         key={`open-${block.start}-${block.end}`}
@@ -513,7 +512,7 @@ export function TodayScheduleCard({
                 </div>
               </div>
 
-              <div className="mt-4 flex flex-wrap items-center gap-4 text-[12px] text-muted">
+              <div className="mt-4 mb-0 flex flex-wrap items-center gap-4 text-[12px] text-muted">
                 <span className="inline-flex items-center gap-1.5">
                   <span aria-hidden="true" className="size-3 rounded-[3px] bg-amber-tint ring-1 ring-amber" />
                   Consultation

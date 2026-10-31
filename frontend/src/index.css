@@ -1,0 +1,161 @@
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+@import "@fontsource/baloo-2/400.css";
+@import "@fontsource/baloo-2/500.css";
+@import "@fontsource/baloo-2/600.css";
+@import "@fontsource/baloo-2/700.css";
+@import "@fontsource/baloo-2/800.css";
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Baloo 2", "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  --color-ink: #2D1B69;
+  --color-muted: #6B6788;
+  --color-primary: #6D28D9;
+  --color-soft: #EDE9FE;
+  --color-border: #DDD6FE;
+  --color-border-card: #E4DEFA;
+  --color-divider: #EFEBFD;
+  --color-page-bg: #F5F3FF;
+  --color-card: #FFFFFF;
+  --color-amber: #F59E0B;
+  --color-amber-tint: #FEF3C7;
+  --color-green: #15803D;
+  --color-green-tint: #DCFCE7;
+
+  --color-schedwise-navy: #1E1B4B;
+  --color-schedwise-purple: #6D28D9;
+  --color-schedwise-lavender-50: #F5F3FF;
+  --color-schedwise-lavender-100: #EDE9FE;
+  --color-schedwise-lavender-200: #E4DAFB;
+  --color-schedwise-yellow: #F59E0B;
+  --color-schedwise-amber: #F59E0B;
+  --color-schedwise-body: #6B7280;
+  --color-schedwise-success: #10B981;
+  --color-schedwise-danger: #E11D48;
+  --color-schedwise-white: #FFFFFF;
+  --color-brand-deep-purple: #2D1B69;
+  --color-welcome-bg: #EDE9FE;
+  --color-welcome-bg-alt: #EEEAFF;
+
+  --radius-card: 16px;
+  --radius-pill: 999px;
+
+  --shadow-schedwise: 0 10px 40px rgba(109, 40, 217, 0.12);
+  --shadow-schedwise-soft: 0 8px 30px rgba(109, 40, 217, 0.15);
+  --shadow-card: 0 1px 2px rgba(45, 27, 105, 0.06);
+}
+
+html {
+  /* Keep centered layouts aligned when navigation changes the page height. */
+  scrollbar-gutter: stable;
+  background: var(--color-schedwise-lavender-50);
+  color: var(--color-schedwise-body);
+  --focus-ring: var(--color-purple-500);
+}
+
+@supports not (scrollbar-gutter: stable) {
+  html {
+    overflow-y: scroll;
+  }
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "cv11", "ss01";
+}
+
+@layer base {
+  input[aria-invalid="true"],
+  select[aria-invalid="true"],
+  textarea[aria-invalid="true"] {
+    border-color: #be123c;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::selection {
+  background: #e9d5ff;
+  color: #581c87;
+}
+
+.striped-block {
+  background-color: #f1f5f9;
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0,
+    transparent 6px,
+    #e2e8f0 6px,
+    #e2e8f0 7px
+  );
+}
+
+@keyframes inject-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes flyout-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+.inject-in {
+  animation: inject-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.flyout-in {
+  animation: flyout-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .inject-in,
+  .flyout-in {
+    animation: none;
+  }
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+.panel-in {
+  animation: panel-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .panel-in {
+    animation: none;
+  }
+}

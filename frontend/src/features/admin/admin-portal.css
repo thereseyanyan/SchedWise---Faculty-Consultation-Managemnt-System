@@ -1,0 +1,435 @@
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+/* ==============================
+   Admin Layout
+============================== */
+
+.sched-admin {
+    --sa-purple: #7029e8;
+    --sa-ink: #2d1c68;
+    --sa-muted: #6c608d;
+
+    display: flex;
+    min-height: 100vh;
+    background: #f5f3ff;
+    color: var(--sa-ink);
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    font-size: 14px;
+}
+
+.sched-admin button {
+    font: inherit;
+    cursor: pointer;
+}
+
+/* ==============================
+   Sidebar
+============================== */
+
+.sched-admin__sidebar {
+    width: 258px;
+    flex: 0 0 258px;
+    background: #fff;
+    border-right: 1px solid #e7defe;
+    display: flex;
+    flex-direction: column;
+    padding: 26px 17px 18px;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+}
+
+/* Brand */
+
+.sched-admin__brand {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 0 23px;
+    border-bottom: 1px solid #eee8ff;
+    color: var(--sa-purple);
+    font-size: 27px;
+    font-weight: 800;
+    letter-spacing: -1px;
+}
+
+.sched-admin__brand > span > span {
+    color: #f59e0b;
+}
+
+.sched-admin__mark {
+    border: 1px solid #d9caff;
+    border-radius: 10px;
+    padding: 3px 8px;
+    font-size: 20px;
+}
+
+.sched-admin__brand-logo {
+  display: block;
+  width: 170px;
+  max-width: 100%;
+  height: 42px;
+  object-fit: contain;
+  object-position: left center;
+  flex-shrink: 0;
+}
+
+/* Navigation */
+
+.sched-admin__nav {
+    display: grid;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.sched-admin__nav button,
+.sched-admin__sidebar-bottom > button {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: #625780;
+    border-radius: 12px;
+    padding: 13px 12px;
+    text-align: left;
+    font-weight: 500;
+}
+
+.sched-admin__nav button.is-active {
+    background: #eee8ff;
+    color: var(--sa-purple);
+    font-weight: 700;
+}
+
+.sched-admin__nav button b {
+    margin-left: auto;
+    border-radius: 20px;
+    background: #fff;
+    color: var(--sa-purple);
+    padding: 2px 7px;
+    font-size: 11px;
+}
+
+/* Sidebar Bottom */
+
+.sched-admin__sidebar-bottom {
+    margin-top: auto;
+}
+
+.sched-admin__mini-profile {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid #e5dcff;
+    border-radius: 15px;
+    padding: 12px;
+    margin-bottom: 12px;
+    box-shadow: 0 2px 6px #3014770a;
+}
+
+.sched-admin__mini-profile div,
+.sched-admin__account > span:nth-child(2) {
+    display: grid;
+    min-width: 0;
+    gap: 3px;
+}
+
+.sched-admin__mini-profile strong,
+.sched-admin__account strong {
+    font-size: 12px;
+}
+
+.sched-admin__mini-profile small,
+.sched-admin__account small {
+    font-size: 10px;
+    color: var(--sa-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Avatar */
+
+.sched-admin__avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 36px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: #eee8ff;
+    color: var(--sa-purple);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.sched-admin__avatar img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+    border-radius: inherit;
+}
+
+/* ==============================
+   Main Content
+============================== */
+
+.sched-admin__main {
+    min-width: 0;
+    flex: 1;
+}
+
+/* Topbar */
+
+.sched-admin__topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    background: #fff;
+    border-bottom: 1px solid #e8e0ff;
+    padding: 17px 28px;
+}
+
+.sched-admin__topbar h1 {
+    font-size: 21px;
+    font-weight: 800;
+    margin: 0;
+    color: var(--sa-ink);
+}
+
+.sched-admin__topbar p {
+    margin: 5px 0 0;
+    color: var(--sa-muted);
+    font-size: 12px;
+}
+
+.sched-admin__top-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* Date */
+
+.sched-admin__date {
+    background: #f5f1ff;
+    border-radius: 12px;
+    padding: 9px 13px;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.sched-admin__date small {
+    display: block;
+    font-size: 10px;
+    font-weight: 400;
+    color: var(--sa-muted);
+}
+
+/* Icon Button */
+
+.sched-admin__icon-btn {
+    display: grid;
+    place-items: center;
+    width: 42px;
+    height: 42px;
+    border: 0;
+    border-radius: 12px;
+    background: #f3edff;
+    color: var(--sa-purple);
+}
+
+/* Account */
+
+.sched-admin__account {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #fff;
+    border: 1px solid #e6ddff;
+    border-radius: 30px;
+    padding: 6px 12px;
+}
+
+/* ==============================
+   Content Area
+============================== */
+
+.sched-admin__content {
+    padding: 24px 30px 40px;
+}
+
+/* Statistics */
+
+.sched-admin__stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 15px;
+    margin-bottom: 23px;
+}
+
+.sched-admin__stat {
+    display: block;
+    text-align: left;
+    background: #fff;
+    border: 1px solid #e3d9ff;
+    border-radius: 16px;
+    padding: 18px;
+    box-shadow: 0 3px 10px #3d217708;
+    color: var(--sa-ink);
+}
+
+.sched-admin__stat-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--sa-muted);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.sched-admin__stat-label i {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    background: #eee8ff;
+    color: var(--sa-purple);
+    font-style: normal;
+}
+
+.sched-admin__stat > strong {
+    display: block;
+    font-size: 30px;
+    line-height: 1.3;
+    margin: 8px 0 5px;
+    font-weight: 800;
+}
+
+.sched-admin__stat > small {
+    font-size: 11px;
+    color: var(--sa-muted);
+}
+
+/* Page Container */
+
+.sched-admin__page {
+    background: #fff;
+    border: 1px solid #e3d9ff;
+    border-radius: 16px;
+    padding: 22px;
+    box-shadow: 0 3px 10px #3d217708;
+}
+
+.sched-admin__page h1,
+.sched-admin__page h2 {
+    color: var(--sa-ink);
+}
+
+/* ==============================
+   Notifications
+============================== */
+
+.sched-admin__notification {
+    display: flex;
+    align-items: center;
+}
+
+.sched-admin__notification button {
+    color: #6d28d9 !important;
+    border-color: #e9ddff !important;
+    background: #fff !important;
+}
+
+.sched-admin__notification button:hover {
+    background: #f5f0ff !important;
+}
+
+/* ==============================
+   Responsive Design
+============================== */
+
+@media (max-width: 1100px) {
+    .sched-admin__sidebar {
+        width: 215px;
+        flex-basis: 215px;
+    }
+
+    .sched-admin__stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .sched-admin__topbar {
+        padding: 16px 20px;
+    }
+
+    .sched-admin__content {
+        padding: 20px;
+    }
+}
+
+@media (max-width: 760px) {
+    .sched-admin {
+        display: block;
+    }
+
+    .sched-admin__sidebar {
+        position: relative;
+        width: auto;
+        height: auto;
+        padding: 12px;
+    }
+
+    .sched-admin__brand {
+        padding-bottom: 10px;
+    }
+
+    .sched-admin__nav {
+        display: flex;
+        overflow-x: auto;
+    }
+
+    .sched-admin__nav button {
+        width: auto;
+        white-space: nowrap;
+    }
+
+    .sched-admin__sidebar-bottom {
+        display: none;
+    }
+
+    .sched-admin__topbar {
+        align-items: flex-start;
+    }
+
+    .sched-admin__date {
+        display: none;
+    }
+
+    .sched-admin__account {
+        max-width: 180px;
+    }
+
+    .sched-admin__content {
+        padding: 14px;
+    }
+
+    .sched-admin__stats {
+        gap: 9px;
+    }
+
+    .sched-admin__stat {
+        padding: 12px;
+    }
+
+    .sched-admin__page {
+        padding: 12px;
+    }
+}

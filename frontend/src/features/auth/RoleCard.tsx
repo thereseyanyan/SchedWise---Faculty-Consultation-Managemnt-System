@@ -1,4 +1,3 @@
-import { GraduationCap, Presentation } from "lucide-react"
 import { Check } from "lucide-react"
 
 type RoleCardProps = {
@@ -13,7 +12,6 @@ export function RoleCard({ role, selected, onSelect }: RoleCardProps) {
   const description = isStudent
     ? "Book consultations with your faculty"
     : "Manage your schedule and consultations"
-  const Icon = isStudent ? GraduationCap : Presentation
 
   return (
     <div className="relative w-full">
@@ -53,9 +51,7 @@ export function RoleCard({ role, selected, onSelect }: RoleCardProps) {
           </span>
         ) : null}
         <div className="flex w-full flex-row items-center justify-center gap-2" aria-hidden="true">
-          <div className="flex h-[80px] w-[80px] items-center justify-center rounded-[20px] bg-schedwise-lavender-100 text-schedwise-purple">
-            <Icon size={44} strokeWidth={1.8} />
-          </div>
+          <img src={isStudent ? "/student.png" : "/teacher.png"} alt="" className="h-[88px] w-[88px] object-contain" />
         </div>
         <div className="flex flex-col items-center">
           <div className="text-sm font-bold uppercase tracking-wide text-schedwise-navy">{title}</div>

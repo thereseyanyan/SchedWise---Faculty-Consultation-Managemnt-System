@@ -97,6 +97,7 @@ export type User = {
   department_id?: string | null;
   program?: string | null;
   phone?: string | null;
+  avatar_path?: string | null;
 };
 
 export type FacultyAvailability = {
@@ -438,6 +439,24 @@ export const usersApi = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+
+  uploadAvatar: async (file: File) => {
+    const form = new FormData();
+    form.append("avatar", file);
+    const headers: Record<string, string> = {};
+    if (csrfToken) headers["X-CSRF-Token"] = csrfToken;
+    const response = await fetch(`${API_BASE_URL}/users/avatar.php`, {
+      method: "POST",
+      headers,
+      body: form,
+      credentials: "include",
+    });
+    const payload = await response.json();
+    if (!response.ok || payload.error || !payload.data) {
+      throw new ApiError(payload.error || "Unable to upload profile picture.", response.status, payload.fields || {});
+    }
+    return payload.data as { avatar_path: string };
+  },
 
   approveStudent: (id: string) =>
     request<ManagedUser>(`/users/index.php?id=${encodeURIComponent(id)}`, {

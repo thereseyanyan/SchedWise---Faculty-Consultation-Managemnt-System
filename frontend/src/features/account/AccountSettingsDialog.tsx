@@ -1,5 +1,5 @@
 import { useContext, useEffect, useState, type FormEvent } from "react"
-import { LockKeyhole, X } from "lucide-react"
+import { Camera, LockKeyhole, X } from "lucide-react"
 import {
   ApiError,
   authApi,
@@ -48,6 +48,8 @@ export function AccountSettingsDialog({
     confirm: "",
   })
   const [profileBusy, setProfileBusy] = useState(false)
+  const [avatarBusy, setAvatarBusy] = useState(false)
+  const [avatarPath, setAvatarPath] = useState(user?.avatar_path ?? "")
   const [passwordBusy, setPasswordBusy] = useState(false)
   const [profileError, setProfileError] = useState("")
   const [profileMessage, setProfileMessage] = useState("")
@@ -61,6 +63,7 @@ export function AccountSettingsDialog({
       Object.entries(departmentIds).find(
         ([, id]) => id === user.department_id,
       )?.[0] ?? ""
+    setAvatarPath(user.avatar_path ?? "")
     setProfile({
       firstName: user.first_name ?? "",
       lastName: user.last_name ?? "",
@@ -88,6 +91,27 @@ export function AccountSettingsDialog({
   if (!open || !user) return null
 
   const role = roleFromId(user.role_id) ?? user.role_id
+
+  const uploadAvatar = async (file?: File) => {
+    if (!file) return
+    setProfileError("")
+    setProfileMessage("")
+    if (file.size > 3 * 1024 * 1024) {
+      setProfileError("Choose an image that is 3 MB or smaller.")
+      return
+    }
+    setAvatarBusy(true)
+    try {
+      const result = await usersApi.uploadAvatar(file)
+      setAvatarPath(result.avatar_path)
+      onUpdated({ ...user, avatar_path: result.avatar_path } as User)
+      setProfileMessage("Profile picture updated.")
+    } catch (err) {
+      setProfileError(errorMessage(err, "Unable to upload your profile picture."))
+    } finally {
+      setAvatarBusy(false)
+    }
+  }
 
   const saveProfile = async (event: FormEvent) => {
     event.preventDefault()
@@ -218,6 +242,19 @@ export function AccountSettingsDialog({
 
         {section === "privacy" ? <div className="px-6 py-2"><PrivacyNotice /></div> : section === "profile" ? (
           <form onSubmit={saveProfile} className="grid gap-4 px-6 py-6 sm:grid-cols-2">
+            <div className="flex items-center gap-4 sm:col-span-2">
+              <div className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-full border border-purple-100 bg-purple-50 text-xl font-bold text-purple-700">
+                {avatarPath ? <img src={avatarPath} alt="Your profile" className="h-full w-full object-cover" /> : `${(user.first_name ?? "A")[0]}${(user.last_name ?? "")[0] ?? ""}`}
+              </div>
+              <div className="min-w-0">
+                <p className={pillLabel}>Profile picture</p>
+                <p className="mb-2 text-xs text-slate-500">PNG, JPG, or WEBP · Up to 3 MB</p>
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-purple-200 px-3 py-2 text-sm font-semibold text-purple-700 hover:bg-purple-50">
+                  <Camera size={15} /> {avatarBusy ? "Uploading…" : avatarPath ? "Change picture" : "Upload picture"}
+                  <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" disabled={avatarBusy} onChange={(event) => { void uploadAvatar(event.target.files?.[0]); event.currentTarget.value = "" }} />
+                </label>
+              </div>
+            </div>
             <label className="block">
               <span className={pillLabel}>First name</span>
               <InputTag

@@ -68,6 +68,14 @@ try {
         ['status' => 'rejected', 'reason' => $reason]
     );
 
+    createRoleNotification(
+        'admin',
+        'appointment_declined',
+        'Appointment declined by faculty',
+        'A faculty member declined a student consultation request for ' . $appointment['appointment_date'] . '.',
+        $id
+    );
+
     createNotification(
         $appointment['student_id'],
         'appointment_rejected',

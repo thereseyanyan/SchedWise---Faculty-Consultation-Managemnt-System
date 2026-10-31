@@ -35,7 +35,7 @@ export function LoginForm({ onSuccess, onForgot, onRegister, initialEmail = "", 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     if (!email.trim() || !password.trim()) {
-      setError("Enter your Student ID or email and password.")
+      setError(`Enter your ${expectedRole === "faculty" ? "faculty email" : expectedRole === "student" ? "Student ID or email" : "email"} and password.`)
       return
     }
     setLoading(true)
@@ -112,7 +112,7 @@ export function LoginForm({ onSuccess, onForgot, onRegister, initialEmail = "", 
       </div>
       <div className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-schedwise-navy">Student ID / Email</label>
+          <label className="block text-sm font-medium text-schedwise-navy">{expectedRole === "faculty" ? "Faculty Email" : expectedRole === "student" ? "Student ID / Email" : "Administrator Email"}</label>
           <InputTag
             type="text"
             inputMode="text"
@@ -122,7 +122,7 @@ export function LoginForm({ onSuccess, onForgot, onRegister, initialEmail = "", 
               setError("")
               setNeedsVerification(false)
             }}
-            placeholder="Student ID or email"
+            placeholder={expectedRole === "faculty" ? "Enter your faculty email" : expectedRole === "student" ? "Student ID or email" : "Enter your email"}
             autoComplete="username"
             className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-schedwise-purple focus:outline-none focus:ring-2 focus:ring-schedwise-purple/20"
           />

@@ -46,6 +46,7 @@ export function FacultyPortalShell({
   stats,
   banner,
   openTimeToday,
+  pageHeader,
   children,
 }: {
   role: Role
@@ -59,8 +60,10 @@ export function FacultyPortalShell({
   stats: Stat[]
   banner?: ReactNode
   openTimeToday?: string
+  pageHeader?: { title: string; description: string }
   children: ReactNode
 }) {
+  const isPage = Boolean(pageHeader)
   const initials = name
     .replace(/^Dr\.\s*/i, "")
     .split(" ")
@@ -263,17 +266,28 @@ export function FacultyPortalShell({
         </div>
       </aside>
 
-      <div className="overflow-x-clip pl-[248px]">
+      <div className={isPage ? "flex h-screen flex-col overflow-x-clip pl-[248px]" : "overflow-x-clip pl-[248px]"}>
         <header className="sticky top-0 z-30 border-b border-divider bg-white/95 backdrop-blur">
           <div className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center gap-4 px-6 py-4">
             <div className="min-w-0 flex-1 sm:min-w-[160px]">
-              <h1 className="font-[var(--font-display)] text-[28px] font-semibold leading-[36px] text-ink">
-                {getGreeting()}, {greetingName}
-              </h1>
-              {subtitle ? <p className="mt-1 text-sm font-medium text-muted">{subtitle}</p> : null}
+              {pageHeader ? (
+                <>
+                  <h1 className="font-[var(--font-display)] text-[28px] font-semibold leading-[36px] text-ink">
+                    {pageHeader.title}
+                  </h1>
+                  <p className="mt-1 text-sm font-medium text-muted">{pageHeader.description}</p>
+                </>
+              ) : (
+                <>
+                  <h1 className="font-[var(--font-display)] text-[28px] font-semibold leading-[36px] text-ink">
+                    {getGreeting()}, {greetingName}
+                  </h1>
+                  {subtitle ? <p className="mt-1 text-sm font-medium text-muted">{subtitle}</p> : null}
+                </>
+              )}
             </div>
 
-            <div ref={searchRef} className="relative order-3 w-full sm:order-2 sm:w-[260px] sm:flex-none">
+            <div ref={searchRef} className={`relative order-3 w-full sm:order-2 sm:w-[260px] sm:flex-none ${isPage ? "hidden" : ""}`}>
               <Search
                 size={16}
                 className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-primary"
@@ -386,9 +400,9 @@ export function FacultyPortalShell({
             </div>
           </div>
         </header>
-        <main className="mx-auto w-full max-w-[1600px] px-6 pb-6 pt-6">
-          {banner ? <div className="mt-0">{banner}</div> : null}
-          <div className="mt-4 grid grid-cols-1 gap-4 min-[480px]:grid-cols-2 lg:grid-cols-4">
+        <main className={`mx-auto w-full max-w-[1600px] px-6 pb-6 pt-6 ${isPage ? "flex min-h-0 flex-1 flex-col" : ""}`}>
+          {!isPage && banner ? <div className="mt-0">{banner}</div> : null}
+          {!isPage ? <div className="mt-4 grid grid-cols-1 gap-4 min-[480px]:grid-cols-2 lg:grid-cols-4">
             {stats.map(({ label, value, hint, icon: IconComponent, onClick, attention }) => {
               const interactive = typeof onClick === "function"
               const cardBody = (
@@ -428,8 +442,8 @@ export function FacultyPortalShell({
                 </div>
               )
             })}
-          </div>
-          <div className={active === "Dashboard" || active === "Today's Schedule" ? "mt-4" : "mt-6"}>{children}</div>
+          </div> : null}
+          <div className={isPage ? "flex min-h-0 flex-1 flex-col" : active === "Dashboard" || active === "Today's Schedule" ? "mt-4" : "mt-6"}>{children}</div>
         </main>
       </div>
     </div>

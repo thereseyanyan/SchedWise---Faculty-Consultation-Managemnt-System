@@ -11,6 +11,7 @@ import {
   NotebookPen,
 } from "lucide-react"
 import { AppointmentListView } from "../appointments/AppointmentListView"
+import { FacultyAppointmentsView } from "./FacultyAppointmentsView"
 import { FacultyAvailabilityView } from "./FacultyAvailabilityView"
 import { FacultyPortalShell } from "./FacultyPortalShell"
 import { FacultyRecordsView } from "./FacultyRecordsView"
@@ -117,7 +118,7 @@ export function FacultyPortal({
 
   const nav = [
     { label: "Dashboard", icon: LayoutDashboard },
-    { label: "Appointments", icon: CalendarClock },
+    { label: "Appointments", icon: CalendarClock, badge: pendingCount },
     { label: "Calendar & Availability", icon: CalendarDays },
     { label: "Consultation Records", icon: NotebookPen },
     { label: "Notifications", icon: Bell },
@@ -188,6 +189,10 @@ export function FacultyPortal({
       ]}
       banner={banner}
       openTimeToday={openTimeToday || "No open time today"}
+      pageHeader={!drilldown && view === "Appointments" ? {
+        title: "Appointments",
+        description: "Review, respond to, and manage your consultation requests.",
+      } : undefined}
       name={name}
       detail={detail}
       navItems={nav}
@@ -205,7 +210,12 @@ export function FacultyPortal({
         </>
       )}
       {!drilldown && (view === "Dashboard" || view === "Today's Schedule") && <FacultyTodayView />}
-      {!drilldown && view === "Appointments" && <AppointmentListView filter="All" />}
+      {!drilldown && view === "Appointments" && (
+        <FacultyAppointmentsView
+          onOpenSchedule={() => setView("Calendar & Availability")}
+          onOpenRecords={() => setView("Consultation Records")}
+        />
+      )}
       {!drilldown && (view === "Calendar & Availability" || view === "Set Availability") && <FacultyAvailabilityView />}
       {!drilldown && (view === "Consultation Records" || view === "Student Records") && <FacultyRecordsView />}
       {!drilldown && view === "Notifications" && <AppointmentListView filter="All" />}

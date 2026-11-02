@@ -68,6 +68,13 @@ Validation: PHP syntax checks, TypeScript checking, production build, 17/17 API 
 - `POST /users/index.php`: admin-only faculty creation, always sets `must_change_password = 1`.
 - `GET /auth/me.php` and login responses include `must_change_password`; `POST /auth/change-password.php` validates the current/new passwords, clears the flag, and rotates CSRF. Other protected APIs reject restricted sessions with `password_change_required`.
 
+## Change Summary (2026-11-02)
+
+- Added the dedicated Faculty **Appointments** page (`frontend/src/features/faculty/FacultyAppointmentsView.tsx`) with data-derived All/Pending/Upcoming/Past/Cancelled-Declined tabs, a pending-review indicator, search, date range, status filters, sort, quick views, active-filter chips, density control, client-side pagination, and a sticky-header independently scrolling table.
+- Added the specified row actions: Accept/Decline for pending and reschedule requests, Approve/Reject for requested times, Reschedule/Cancel for confirmed appointments, View record for completed appointments, and view-only actions for final states. Decline, reject, and cancel require a written reason; mutations use the existing appointment API and update the shared appointment cache.
+- Added an optional full-height page mode to `FacultyPortalShell` and wired the new view into `FacultyPortal`, including the pending-count nav badge. Appointment details and reschedule deep-linking remain integration points because the existing detail panel is currently owned by the dashboard view.
+- Validation: `npx tsc --noEmit` and `npm run build` passed. A headless Chrome check at 1440x900 confirmed 40px toolbar controls on one row, 44px sidebar rows, 64px comfortable / 52px compact rows, 32px action slots, sticky table header, no horizontal or page-level vertical overflow, no sub-12px text, working search/filter/quick-view/density states, and no page errors after sign-in. The committed browser smoke test remains blocked by the local SMTP fixture safety check.
+
 ## Change Summary (2026-10-27)
 
 - Fixed the Faculty Dashboard **Today's Consultations** card: it now counts only `confirmed` appointments whose `appointment_date` equals the browser's local calendar day. It previously counted every confirmed appointment for the signed-in faculty member across all dates. The card drilldown now opens **Today Appointments** instead of the unfiltered list.

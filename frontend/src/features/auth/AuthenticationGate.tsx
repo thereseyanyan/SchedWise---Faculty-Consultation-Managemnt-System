@@ -17,6 +17,7 @@ export function AuthenticationGate({ onLogin }: { onLogin: (user: User) => void 
   const [verifying, setVerifying] = useState(Boolean(initialVerifyToken))
   const [modalOpen, setModalOpen] = useState(initialVerifyToken ? true : false)
   const [modalMode, setModalMode] = useState<"login" | "signup">("login")
+  const [loginAsAdmin, setLoginAsAdmin] = useState(false)
   const [initialRole, setInitialRole] = useState<"student" | "faculty">("student")
 
   useEffect(() => {
@@ -86,11 +87,19 @@ export function AuthenticationGate({ onLogin }: { onLogin: (user: User) => void 
           <WelcomePage
             onSignUp={(role) => {
               setInitialRole(role)
+              setLoginAsAdmin(false)
               setModalMode("signup")
               setModalOpen(true)
               setScreen("welcome")
             }}
             onLogin={() => {
+              setLoginAsAdmin(false)
+              setModalMode("login")
+              setModalOpen(true)
+              setScreen("welcome")
+            }}
+            onAdminLogin={() => {
+              setLoginAsAdmin(true)
               setModalMode("login")
               setModalOpen(true)
               setScreen("welcome")
@@ -104,6 +113,7 @@ export function AuthenticationGate({ onLogin }: { onLogin: (user: User) => void 
           onSwitchMode={(m) => setModalMode(m)}
           onLoginSuccess={onLogin}
           initialRole={initialRole}
+          loginAsAdmin={loginAsAdmin}
         />
       </>
     )
@@ -134,11 +144,19 @@ export function AuthenticationGate({ onLogin }: { onLogin: (user: User) => void 
         <WelcomePage
           onSignUp={(role) => {
             setInitialRole(role)
+            setLoginAsAdmin(false)
             setModalMode("signup")
             setModalOpen(true)
             setScreen("welcome")
           }}
           onLogin={() => {
+            setLoginAsAdmin(false)
+            setModalMode("login")
+            setModalOpen(true)
+            setScreen("welcome")
+          }}
+          onAdminLogin={() => {
+            setLoginAsAdmin(true)
             setModalMode("login")
             setModalOpen(true)
             setScreen("welcome")
@@ -152,6 +170,7 @@ export function AuthenticationGate({ onLogin }: { onLogin: (user: User) => void 
         onSwitchMode={(m) => setModalMode(m)}
         onLoginSuccess={onLogin}
         initialRole={initialRole}
+        loginAsAdmin={loginAsAdmin}
       />
     </>
   )

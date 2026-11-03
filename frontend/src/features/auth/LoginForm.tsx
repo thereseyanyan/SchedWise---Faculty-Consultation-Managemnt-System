@@ -18,9 +18,11 @@ type LoginFormProps = {
   onForgot: () => void
   onRegister: () => void
   initialEmail?: string
+  variant?: "default" | "admin"
 }
 
-export function LoginForm({ onSuccess, onForgot, onRegister, initialEmail = "" }: LoginFormProps) {
+export function LoginForm({ onSuccess, onForgot, onRegister, initialEmail = "", variant = "default" }: LoginFormProps) {
+  const isAdmin = variant === "admin"
   const [email, setEmail] = useState(initialEmail)
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
@@ -32,7 +34,7 @@ export function LoginForm({ onSuccess, onForgot, onRegister, initialEmail = "" }
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     if (!email.trim() || !password.trim()) {
-      setError("Enter your Student ID or email and password.")
+      setError(isAdmin ? "Enter your email and password." : "Enter your Student ID or email and password.")
       return
     }
     setLoading(true)
@@ -80,12 +82,16 @@ export function LoginForm({ onSuccess, onForgot, onRegister, initialEmail = "" }
   return (
     <form onSubmit={handleSubmit} noValidate className="flex flex-col">
       <div className="mb-6">
-        <h1 className="font-display text-3xl font-bold text-schedwise-navy" id="login-title">Login</h1>
-        <p className="mt-1 text-sm text-schedwise-body">Sign in to access your dashboard</p>
+        <h1 className="font-display text-3xl font-bold text-schedwise-navy" id="login-title">
+          {isAdmin ? "Administrator Login" : "Login"}
+        </h1>
+        <p className="mt-1 text-sm text-schedwise-body">
+          {isAdmin ? "Sign in with your administrator account" : "Sign in to access your dashboard"}
+        </p>
       </div>
       <div className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-schedwise-navy">Student ID / Email</label>
+          <label className="block text-sm font-medium text-schedwise-navy">{isAdmin ? "Email" : "Student ID / Email"}</label>
           <InputTag
             type="text"
             inputMode="text"
@@ -95,7 +101,7 @@ export function LoginForm({ onSuccess, onForgot, onRegister, initialEmail = "" }
               setError("")
               setNeedsVerification(false)
             }}
-            placeholder="Student ID or email"
+            placeholder={isAdmin ? "Administrator email" : "Student ID or email"}
             autoComplete="username"
             className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-schedwise-purple focus:outline-none focus:ring-2 focus:ring-schedwise-purple/20"
           />
@@ -147,13 +153,19 @@ export function LoginForm({ onSuccess, onForgot, onRegister, initialEmail = "" }
       >
         {loading ? "Logging in..." : "LOGIN"}
       </Button>
-      <p className="mt-4 text-center text-xs text-schedwise-body">
-        Don't have an account?{" "}
-        <button type="button" onClick={onRegister} className="font-medium text-schedwise-purple hover:underline">
-          Register
-        </button>
+      {isAdmin ? (
+        <p className="mt-4 text-center text-xs text-schedwise-body">Administrator accounts are provisioned internally.</p>
+      ) : (
+        <p className="mt-4 text-center text-xs text-schedwise-body">
+          Don't have an account?{" "}
+          <button type="button" onClick={onRegister} className="font-medium text-schedwise-purple hover:underline">
+            Register
+          </button>
+        </p>
+      )}
+      <p className="mt-3 text-center text-xs text-slate-400">
+        {isAdmin ? "Contact the system owner if you need help." : "If there's a problem, contact your Administrator."}
       </p>
-      <p className="mt-3 text-center text-xs text-slate-400">If there's a problem, contact your Administrator.</p>
     </form>
   )
 }

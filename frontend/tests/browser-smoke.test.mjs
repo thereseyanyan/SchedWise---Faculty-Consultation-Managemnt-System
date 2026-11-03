@@ -215,6 +215,11 @@ test("SchedWise browser smoke", { timeout: 180_000 }, async (t) => {
 
   try {
     await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "Administrator sign in" }).click();
+    await page.getByRole("heading", { name: "Administrator Login", exact: true }).waitFor();
+    assert.equal(await page.getByRole("button", { name: "Register", exact: true }).count(), 0);
+    await page.getByRole("dialog").getByRole("button", { name: "Back", exact: true }).click();
+    await page.getByRole("dialog").waitFor({ state: "detached" });
     await page.locator("button[data-role=faculty]").click();
     assert.equal(await page.getByRole("button", { name: /Sign Up/ }).count(), 0);
     await page.getByText(/Faculty accounts are created by your administrator/).waitFor();

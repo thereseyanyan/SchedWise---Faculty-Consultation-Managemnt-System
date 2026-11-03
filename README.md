@@ -1,6 +1,6 @@
 # SchedWise — Faculty Consultation and Appointment Management System
 
-> **Current email setup:** Outgoing messages use the SMTP sender configured in ignored `backend/config.php` or `SCHEDWISE_MAIL_*` variables. The launcher no longer starts Mailpit automatically. Local configuration currently uses Gmail SMTP; keep sender credentials private.
+> **Current email setup:** Outgoing messages use the SMTP sender configured in ignored `backend/config.php` or `SCHEDWISE_MAIL_*` variables. The launcher no longer starts Mailpit automatically. This checkout's local config points to Mailpit at `127.0.0.1:1025`; to send through Gmail instead, set `SCHEDWISE_MAIL_HOST=smtp.gmail.com`, `SCHEDWISE_MAIL_PORT=587`, `SCHEDWISE_MAIL_ENCRYPTION=tls`, `SCHEDWISE_MAIL_USERNAME`, `SCHEDWISE_MAIL_PASSWORD` (a Google app password), and `SCHEDWISE_MAIL_FROM` in ignored local settings. Keep sender credentials private and never commit them.
 
 
 The document reserves a stable vertical scrollbar gutter so centered headers, dashboard cards, and content do not shift horizontally between short and long pages. Older browsers use an always-reserved vertical scrollbar as a fallback.
@@ -526,6 +526,8 @@ The registration form maps college labels to the seeded department IDs (`ccs`, `
 | Faculty | `elena.cruz@schedwise.edu` | `Passw0rd!` |
 | Student | `juan.delacruz@schedwise.edu` | `Passw0rd!` |
 
+**Administrator access:** on the welcome page, click **Administrator? Sign in here** below the Student and Faculty cards. The login modal opens with the **Administrator Login** heading. Administrator accounts are provisioned internally, so student/faculty registration remains unchanged.
+
 These are local demo credentials only. The login screen no longer displays them; use this table for local demo access. Change them if the project is shared or exposed.
 
 ### Clean baseline and maintenance
@@ -710,7 +712,7 @@ The server checks the current role and ownership on every request. Do not rely o
 - MySQL 8+ listening on `127.0.0.1:3306` (the current machine uses MySQL 9.5)
 - Node.js 20.19+ or 22.12+ and npm (the current machine uses Node 25.9.0)
 
-The launcher can start the local MySQL service/direct `mysqld` process, the two app servers, and Mailpit. It checks PHP/Node.js versions, npm, and MySQL availability first and offers the relevant download page if a prerequisite is missing, but it cannot install them silently.
+The launcher can start the local MySQL service/direct `mysqld` process and the two app servers. It checks PHP/Node.js versions, npm, and MySQL availability first and offers the relevant download page if a prerequisite is missing, but it cannot install them silently. Mailpit is not started automatically; start it separately or configure a real SMTP provider.
 
 ### One-click (normal use)
 
@@ -720,13 +722,13 @@ The launcher can start the local MySQL service/direct `mysqld` process, the two 
    - starts MySQL if it is not listening
    - runs `tools/setup-database.php`
    - installs frontend dependencies if `node_modules` is missing
-   - starts the PHP API, Vite, and Mailpit hidden
+   - starts the PHP API and Vite hidden
    - opens `http://localhost:5173`
-3. Sign in with a demo account above, or register a student or faculty account.
-4. New registrations are pending until the verification email is opened. Verification and password-reset emails appear in the local Mailpit inbox at `http://localhost:8025`.
+3. Sign in with a demo account above, or register a student account. Administrators use **Administrator? Sign in here** below the role cards; faculty accounts are created by an administrator.
+4. New registrations are pending until the verification email is opened. With the local Mailpit config, start Mailpit manually and read messages at `http://localhost:8025`; with Gmail SMTP configured, messages go to the recipient's inbox.
 5. To stop the app servers, double-click **STOP SchedWise** on the Desktop (red stop icon). MySQL is intentionally left running.
 
-First run may take a few minutes if `npm install` is needed and Mailpit must be downloaded to `.runtime/mailpit`. Later starts are fast. The Mailpit download is pinned to v1.31.6 and requires internet once; if it cannot be downloaded, SchedWise still starts and localhost debug reset codes/verification links remain available.
+First run may take a few minutes if `npm install` is needed. Later starts are fast. Mailpit is not started automatically; use it manually for local email testing or configure a real SMTP provider.
 
 ### Shortcut locations
 

@@ -6,9 +6,10 @@ import { RoleCard, FeaturePill } from "./RoleCard"
 type WelcomePageProps = {
   onSignUp: (role: "student" | "faculty") => void
   onLogin: () => void
+  onAdminLogin: () => void
 }
 
-export function WelcomePage({ onSignUp, onLogin }: WelcomePageProps) {
+export function WelcomePage({ onSignUp, onLogin, onAdminLogin }: WelcomePageProps) {
   const [selectedRole, setSelectedRole] = useState<"student" | "faculty" | null>(null)
   const lastFocusedRef = useRef<HTMLButtonElement | null>(null)
   const groupRef = useRef<HTMLDivElement>(null)
@@ -119,6 +120,17 @@ export function WelcomePage({ onSignUp, onLogin }: WelcomePageProps) {
                     <RoleCard role="student" selected={selectedRole === "student"} onSelect={handleSelect} />
                     <RoleCard role="faculty" selected={selectedRole === "faculty"} onSelect={handleSelect} />
                   </div>
+                  <p className="mt-4 text-sm text-schedwise-body">
+                    Administrator?{" "}
+                    <button
+                      type="button"
+                      onClick={onAdminLogin}
+                      aria-label="Administrator sign in"
+                      className="font-semibold text-schedwise-purple underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-schedwise-purple focus-visible:ring-offset-2"
+                    >
+                      Sign in here
+                    </button>
+                  </p>
                 </div>
                 <div
                   aria-live="polite"

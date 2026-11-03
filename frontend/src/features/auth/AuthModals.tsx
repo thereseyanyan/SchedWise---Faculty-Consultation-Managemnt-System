@@ -15,6 +15,7 @@ type AuthModalsProps = {
   onLoginSuccess: (user: any) => void
   initialRole?: "student" | "faculty"
   loginAsAdmin?: boolean
+  loginRole?: "student" | "faculty"
 }
 
 export function AuthModals({
@@ -25,6 +26,7 @@ export function AuthModals({
   onLoginSuccess,
   initialRole = "student",
   loginAsAdmin = false,
+  loginRole = "student",
 }: AuthModalsProps) {
   const [forgotOpen, setForgotOpen] = useState(false)
   const [signupEmail, setSignupEmail] = useState("")
@@ -63,6 +65,7 @@ export function AuthModals({
                   onForgot={() => setForgotOpen(true)}
                   onRegister={() => onSwitchMode("signup")}
                   initialEmail={showSignupNotice ? signupEmail : ""}
+                  expectedRole={loginAsAdmin ? undefined : loginRole}
                   variant={loginAsAdmin ? "admin" : "default"}
                 />
                 {showSignupNotice ? (

@@ -186,6 +186,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $pdo->commit();
 
+        // Notify administrators when a student submits an appointment request.
+        $studentNameStmt = $pdo->prepare('SELECT first_name, last_name FROM user_profiles WHERE user_id = ?');
+        $studentNameStmt->execute([$user['id']]);
+        $studentName = $studentNameStmt->fetch();
+        $studentDisplay = trim((string)($studentName['first_name'] ?? 'Student') . ' ' . (string)($studentName['last_name'] ?? ''));
+        createRoleNotification(
+            'admin',
+            'appointment_requested',
+            'New appointment request',
+            $studentDisplay . ' requested a consultation for ' . $input['appointment_date'] . '.',
+            $appointmentId
+        );
+
         // Log audit
         logAudit('create', 'appointment', $appointmentId, [], [
             'student_id' => $input['student_id'],

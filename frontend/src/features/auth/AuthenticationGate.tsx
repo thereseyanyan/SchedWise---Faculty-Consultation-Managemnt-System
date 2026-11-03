@@ -19,6 +19,7 @@ export function AuthenticationGate({ onLogin }: { onLogin: (user: User) => void 
   const [modalMode, setModalMode] = useState<"login" | "signup">("login")
   const [loginAsAdmin, setLoginAsAdmin] = useState(false)
   const [initialRole, setInitialRole] = useState<"student" | "faculty">("student")
+  const [loginRole, setLoginRole] = useState<"student" | "faculty">("student")
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -92,7 +93,8 @@ export function AuthenticationGate({ onLogin }: { onLogin: (user: User) => void 
               setModalOpen(true)
               setScreen("welcome")
             }}
-            onLogin={() => {
+            onLogin={(role) => {
+              setLoginRole(role)
               setLoginAsAdmin(false)
               setModalMode("login")
               setModalOpen(true)
@@ -114,6 +116,7 @@ export function AuthenticationGate({ onLogin }: { onLogin: (user: User) => void 
           onLoginSuccess={onLogin}
           initialRole={initialRole}
           loginAsAdmin={loginAsAdmin}
+          loginRole={loginRole}
         />
       </>
     )
@@ -149,7 +152,8 @@ export function AuthenticationGate({ onLogin }: { onLogin: (user: User) => void 
             setModalOpen(true)
             setScreen("welcome")
           }}
-          onLogin={() => {
+          onLogin={(role) => {
+            setLoginRole(role)
             setLoginAsAdmin(false)
             setModalMode("login")
             setModalOpen(true)
@@ -171,6 +175,7 @@ export function AuthenticationGate({ onLogin }: { onLogin: (user: User) => void 
         onLoginSuccess={onLogin}
         initialRole={initialRole}
         loginAsAdmin={loginAsAdmin}
+        loginRole={loginRole}
       />
     </>
   )

@@ -31,7 +31,7 @@ export function NotificationsButton() {
   useEffect(() => {
     void load(true)
     const onFocus = () => { void load(true) }
-    const timer = window.setInterval(() => { void load(true) }, 60_000)
+    const timer = window.setInterval(() => { void load(true) }, 15_000)
     window.addEventListener("focus", onFocus)
     return () => {
       window.removeEventListener("focus", onFocus)
@@ -97,7 +97,7 @@ export function NotificationsButton() {
         onClick={openPanel}
         title="Notifications"
         aria-label={unread > 0 ? `Notifications, ${unread} unread` : "Notifications"}
-        className="relative inline-flex size-10 items-center justify-center rounded-[4px] border border-white/70 text-white transition hover:bg-white hover:text-purple-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
+        className="relative inline-flex size-10 items-center justify-center rounded-xl border border-purple-100 bg-white text-purple-700 transition hover:bg-purple-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-300"
       >
         <Bell size={15} />
         {unread > 0 && (

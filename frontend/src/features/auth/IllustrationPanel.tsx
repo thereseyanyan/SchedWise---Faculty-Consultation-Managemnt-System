@@ -13,15 +13,7 @@ export function IllustrationPanel({ side = "left" }: { side?: "left" | "right" }
         <h2 className="font-display text-2xl font-bold text-schedwise-navy">Meet Your Study Companion</h2>
         <p className="mt-2 text-sm text-schedwise-body">SchedWise helps you stay on track</p>
         <div className="mt-6 rounded-2xl bg-white p-6 shadow-schedwise-soft">
-          <svg viewBox="0 0 200 140" className="h-32 w-full" aria-hidden="true">
-            <rect x="20" y="30" width="160" height="90" rx="12" fill="#F5F3FF" />
-            <rect x="30" y="40" width="40" height="12" rx="6" fill="#EDE9FE" />
-            <rect x="30" y="60" width="140" height="8" rx="4" fill="#EDE9FE" />
-            <rect x="30" y="75" width="120" height="8" rx="4" fill="#EDE9FE" />
-            <rect x="30" y="90" width="90" height="8" rx="4" fill="#EDE9FE" />
-            <circle cx="150" cy="50" r="6" fill="#F59E0B" />
-            <rect x="145" y="45" width="10" height="10" rx="2" fill="#F59E0B" />
-          </svg>
+          <img src="/coding.png" alt="Coding Time" className="mx-auto h-32 w-full object-contain" />
           <div className="mt-3 flex items-center justify-center gap-2 text-xs text-schedwise-body">
             <span className="h-2 w-2 rounded-full bg-schedwise-yellow" />
             <span>Coding Time</span>

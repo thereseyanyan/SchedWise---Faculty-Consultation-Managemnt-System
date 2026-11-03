@@ -11,6 +11,7 @@ import {
   errorMessage,
   isStrongPassword,
   passwordPolicyMessage,
+  roleFromId,
 } from "../../shared"
 
 type LoginFormProps = {
@@ -18,10 +19,11 @@ type LoginFormProps = {
   onForgot: () => void
   onRegister: () => void
   initialEmail?: string
+  expectedRole?: "student" | "faculty"
   variant?: "default" | "admin"
 }
 
-export function LoginForm({ onSuccess, onForgot, onRegister, initialEmail = "", variant = "default" }: LoginFormProps) {
+export function LoginForm({ onSuccess, onForgot, onRegister, initialEmail = "", expectedRole, variant = "default" }: LoginFormProps) {
   const isAdmin = variant === "admin"
   const [email, setEmail] = useState(initialEmail)
   const [password, setPassword] = useState("")
@@ -34,7 +36,7 @@ export function LoginForm({ onSuccess, onForgot, onRegister, initialEmail = "", 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     if (!email.trim() || !password.trim()) {
-      setError(isAdmin ? "Enter your email and password." : "Enter your Student ID or email and password.")
+      setError(`Enter your ${expectedRole === "faculty" ? "faculty email" : expectedRole === "student" ? "Student ID or email" : "email"} and password.`)
       return
     }
     setLoading(true)
@@ -43,6 +45,30 @@ export function LoginForm({ onSuccess, onForgot, onRegister, initialEmail = "", 
     setNeedsVerification(false)
     try {
       const { user } = await authApi.login({ identifier: email.trim(), password })
+      if (expectedRole) {
+        const role = roleFromId(user.role_id)
+        if (role === "Admin") {
+          // Administrators are exempt
+          onSuccess(user)
+          return
+        }
+        if (expectedRole === "student" && role === "Faculty") {
+          try {
+            await authApi.logout()
+          } catch {}
+          setError("This is a faculty account. Please choose Faculty to sign in.")
+          setLoading(false)
+          return
+        }
+        if (expectedRole === "faculty" && role === "Student") {
+          try {
+            await authApi.logout()
+          } catch {}
+          setError("This is a student account. Please choose Student to sign in.")
+          setLoading(false)
+          return
+        }
+      }
       onSuccess(user)
     } catch (err) {
       if (err instanceof ApiError && err.code === "email_unverified") {
@@ -91,7 +117,7 @@ export function LoginForm({ onSuccess, onForgot, onRegister, initialEmail = "", 
       </div>
       <div className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-schedwise-navy">{isAdmin ? "Email" : "Student ID / Email"}</label>
+          <label className="block text-sm font-medium text-schedwise-navy">{expectedRole === "faculty" ? "Faculty Email" : expectedRole === "student" ? "Student ID / Email" : isAdmin ? "Administrator Email" : "Student ID / Email"}</label>
           <InputTag
             type="text"
             inputMode="text"
@@ -101,7 +127,7 @@ export function LoginForm({ onSuccess, onForgot, onRegister, initialEmail = "", 
               setError("")
               setNeedsVerification(false)
             }}
-            placeholder={isAdmin ? "Administrator email" : "Student ID or email"}
+            placeholder={expectedRole === "faculty" ? "Enter your faculty email" : expectedRole === "student" ? "Student ID or email" : isAdmin ? "Administrator email" : "Student ID or email"}
             autoComplete="username"
             className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-schedwise-purple focus:outline-none focus:ring-2 focus:ring-schedwise-purple/20"
           />

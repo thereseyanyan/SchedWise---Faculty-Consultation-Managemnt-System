@@ -93,7 +93,7 @@ function authenticateUser(): array
     $statement = $pdo->prepare(
         'SELECT u.id, u.email, u.role_id, u.status, u.faculty_approval_status, u.student_approval_status, u.must_change_password, u.password_hash,
                 up.first_name, up.last_name,
-                up.student_number, up.faculty_number, up.department_id, up.program, up.phone
+                up.student_number, up.faculty_number, up.department_id, up.program, up.phone, up.avatar_path
          FROM users u
          LEFT JOIN user_profiles up ON u.id = up.user_id
          WHERE u.id = :id AND u.deleted_at IS NULL'
@@ -262,6 +262,29 @@ function createNotification(
         ':message' => $message,
         ':related_appointment_id' => $relatedAppointmentId,
     ]);
+}
+
+/**
+ * Notify every active account with the requested role (used for admin activity alerts).
+ */
+function createRoleNotification(
+    string $roleId,
+    string $type,
+    string $title,
+    string $message,
+    ?string $relatedAppointmentId = null
+): void {
+    global $pdo;
+    try {
+        $statement = $pdo->prepare("SELECT id FROM users WHERE role_id = :role_id AND status = 'active' AND deleted_at IS NULL");
+        $statement->execute([':role_id' => $roleId]);
+        foreach ($statement->fetchAll(PDO::FETCH_COLUMN) as $userId) {
+            createNotification((string)$userId, $type, $title, $message, $relatedAppointmentId);
+        }
+    } catch (Throwable $exception) {
+        // Notification failure must not reverse an already-saved registration or appointment.
+        error_log('Role notification failed: ' . $exception->getMessage());
+    }
 }
 
 /**

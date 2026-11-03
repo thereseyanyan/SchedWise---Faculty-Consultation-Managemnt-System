@@ -73,6 +73,14 @@ try {
 
     logAudit('update', 'appointment', $id, ['status' => $appointment['status']], ['status' => 'confirmed']);
 
+    createRoleNotification(
+        'admin',
+        'appointment_approved',
+        'Appointment approved by faculty',
+        'A faculty member approved a student consultation request for ' . $appointment['appointment_date'] . '.',
+        $id
+    );
+
     createNotification(
         $appointment['student_id'],
         'appointment_approved',

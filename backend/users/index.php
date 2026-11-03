@@ -25,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             'SELECT u.id, u.email, u.role_id, u.status, u.email_verified_at,
                     u.faculty_approval_status, u.student_approval_status, u.last_login_at, u.created_at,
                     up.first_name, up.last_name, up.student_number, up.faculty_number,
-                    up.department_id, up.program, up.phone
+                    up.department_id, up.program, up.phone, up.avatar_path
              FROM users u
              LEFT JOIN user_profiles up ON u.id = up.user_id
              WHERE u.id = :id AND u.deleted_at IS NULL'
@@ -79,7 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         "SELECT u.id, u.email, u.role_id, u.status, u.email_verified_at,
                 u.faculty_approval_status, u.student_approval_status, u.last_login_at, u.created_at,
                 up.first_name, up.last_name, up.student_number, up.faculty_number,
-                up.department_id, up.program, up.phone
+                up.department_id, up.program, up.phone, up.avatar_path
          FROM users u
          LEFT JOIN user_profiles up ON u.id = up.user_id
          {$whereClause}
@@ -100,7 +100,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
 
     $statement = $pdo->prepare(
         'SELECT u.*, up.first_name, up.last_name, up.student_number, up.faculty_number,
-                up.department_id, up.program, up.phone
+                up.department_id, up.program, up.phone, up.avatar_path
          FROM users u
          LEFT JOIN user_profiles up ON u.id = up.user_id
          WHERE u.id = :id AND u.deleted_at IS NULL'
@@ -202,7 +202,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
             'SELECT u.id, u.email, u.role_id, u.status, u.email_verified_at,
                     u.student_approval_status, u.last_login_at, u.created_at,
                     up.first_name, up.last_name, up.student_number, up.faculty_number,
-                    up.department_id, up.program, up.phone
+                    up.department_id, up.program, up.phone, up.avatar_path
              FROM users u
              LEFT JOIN user_profiles up ON u.id = up.user_id
              WHERE u.id = :id'
@@ -319,7 +319,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
             'SELECT u.id, u.email, u.role_id, u.status, u.email_verified_at,
                     u.faculty_approval_status, u.student_approval_status, u.last_login_at, u.created_at,
                     up.first_name, up.last_name, up.student_number, up.faculty_number,
-                    up.department_id, up.program, up.phone
+                    up.department_id, up.program, up.phone, up.avatar_path
              FROM users u
              LEFT JOIN user_profiles up ON u.id = up.user_id
              WHERE u.id = :id'

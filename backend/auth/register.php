@@ -126,6 +126,16 @@ try {
 
     logAudit('create', 'user', $userId, [], ['role_id' => 'student', 'student_approval_status' => 'pending']);
     $pdo->commit();
+
+    // Notify administrators in-app. This does not depend on SMTP email.
+    createRoleNotification(
+        'admin',
+        'student_registration',
+        'New student registration',
+        trim((string)($input['first_name'] ?? '') . ' ' . (string)($input['last_name'] ?? '')) .
+            ' registered and is awaiting administrator approval.'
+    );
+
     $emailSent = false;
     try {
         sendStudentRegistrationReceived(

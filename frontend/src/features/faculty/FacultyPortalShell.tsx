@@ -191,7 +191,7 @@ export function FacultyPortalShell({
                 <span className="min-w-0 flex-1 truncate text-left leading-5">{label}</span>
                 {badge !== undefined && badge !== null && badge > 0 ? (
                   <span
-                    className={`ml-auto inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-semibold ${
+                    className={`ml-auto inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 py-0.5 text-[12px] font-semibold ${
                       isActive ? "bg-white/90 text-ink" : "bg-soft text-ink"
                     }`}
                   >

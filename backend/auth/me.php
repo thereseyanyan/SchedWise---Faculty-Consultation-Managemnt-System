@@ -26,6 +26,7 @@ respond([
         'department_id' => $user['department_id'] ?? null,
         'program' => $user['program'] ?? null,
         'phone' => $user['phone'] ?? null,
+        'timezone' => date_default_timezone_get(),
     ],
     'csrf_token' => generateCsrfToken(),
 ]);

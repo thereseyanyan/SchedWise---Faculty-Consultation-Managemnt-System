@@ -109,6 +109,22 @@ try {
     // Faculty/admin can confirm the new slot; students request a reschedule.
     $newStatus = ($isFacultyOwner || $isAdmin) ? 'confirmed' : 'reschedule_requested';
 
+    // Keep the pre-request time for student requests so the review panel can
+    // show the current and requested slots distinctly. A repeated request keeps
+    // the original snapshot; faculty/admin moves clear it.
+    $snapshotDate = $appointment['reschedule_from_date'] ?? null;
+    $snapshotStart = $appointment['reschedule_from_start_minutes'] ?? null;
+    $snapshotEnd = $appointment['reschedule_from_end_minutes'] ?? null;
+    if (!$isStudentOwner) {
+        $snapshotDate = null;
+        $snapshotStart = null;
+        $snapshotEnd = null;
+    } elseif ($appointment['status'] !== 'reschedule_requested') {
+        $snapshotDate = $appointment['appointment_date'];
+        $snapshotStart = (int)$appointment['start_minutes'];
+        $snapshotEnd = (int)$appointment['end_minutes'];
+    }
+
     $statement = $pdo->prepare(
         'UPDATE appointments SET
          appointment_date = :appointment_date,
@@ -116,6 +132,9 @@ try {
          end_minutes = :end_minutes,
          status = :status,
          reschedule_reason = :reschedule_reason,
+         reschedule_from_date = :reschedule_from_date,
+         reschedule_from_start_minutes = :reschedule_from_start_minutes,
+         reschedule_from_end_minutes = :reschedule_from_end_minutes,
          approved_at = CASE WHEN :status2 = \'confirmed\' THEN COALESCE(approved_at, NOW()) ELSE approved_at END,
          updated_at = NOW()
          WHERE id = :id'
@@ -127,6 +146,9 @@ try {
         ':status' => $newStatus,
         ':status2' => $newStatus,
         ':reschedule_reason' => $reason !== '' ? $reason : null,
+        ':reschedule_from_date' => $snapshotDate,
+        ':reschedule_from_start_minutes' => $snapshotStart,
+        ':reschedule_from_end_minutes' => $snapshotEnd,
         ':id' => $id,
     ]);
 

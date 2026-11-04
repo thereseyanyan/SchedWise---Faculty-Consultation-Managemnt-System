@@ -25,7 +25,11 @@ export type Appointment = {
   completed_at?: string;
   cancelled_at?: string;
   cancelled_by?: string;
+  cancellation_reason?: string;
   reschedule_reason?: string;
+  reschedule_from_date?: string;
+  reschedule_from_start_minutes?: number;
+  reschedule_from_end_minutes?: number;
   created_at: string;
   updated_at: string;
   faculty_first_name?: string;
@@ -97,6 +101,7 @@ export type User = {
   department_id?: string | null;
   program?: string | null;
   phone?: string | null;
+  timezone?: string;
 };
 
 export type FacultyAvailability = {

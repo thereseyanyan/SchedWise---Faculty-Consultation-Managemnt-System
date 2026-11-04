@@ -200,6 +200,20 @@ function ensureMigrations(PDO $pdo): void
     if ($column === false) {
         $pdo->exec('ALTER TABLE appointments ADD COLUMN cancellation_reason TEXT NULL AFTER cancelled_by');
     }
+
+    // Preserve the pre-request time so faculty can compare the current and
+    // requested slots while a student reschedule is awaiting review.
+    $requestSnapshotColumns = [
+        'reschedule_from_date' => 'DATE NULL AFTER reschedule_reason',
+        'reschedule_from_start_minutes' => 'SMALLINT UNSIGNED NULL AFTER reschedule_from_date',
+        'reschedule_from_end_minutes' => 'SMALLINT UNSIGNED NULL AFTER reschedule_from_start_minutes',
+    ];
+    foreach ($requestSnapshotColumns as $columnName => $definition) {
+        $column = $pdo->query("SHOW COLUMNS FROM appointments LIKE '{$columnName}'")->fetch();
+        if ($column === false) {
+            $pdo->exec("ALTER TABLE appointments ADD COLUMN {$columnName} {$definition}");
+        }
+    }
 }
 
 try {

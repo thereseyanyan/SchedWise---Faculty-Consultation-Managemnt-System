@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import {
+  AlertTriangle,
   CalendarClock,
   CalendarDays,
   Check,
@@ -31,6 +32,10 @@ import {
   fullName,
   statusLabel,
 } from "../../shared"
+import {
+  getAppointmentPanelState,
+  type AppointmentActionId,
+} from "./appointmentPanelState"
 
 type HistoryStep = {
   title: string
@@ -68,6 +73,44 @@ function timestampLabel(value?: string) {
   })}`
 }
 
+function scheduleTimeLabel(date: string, start: number, end: number) {
+  return `${formatDate(fromIso(date), {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  })} \u00b7 ${clock(start, (start >= 720) !== (end >= 720))} \u2013 ${clock(end)}`
+}
+
+function actionIcon(id: AppointmentActionId) {
+  switch (id) {
+    case "accept":
+    case "approve":
+    case "complete":
+      return Check
+    case "decline":
+    case "reject":
+    case "cancel":
+      return X
+    case "reschedule":
+      return CalendarClock
+    case "no-show":
+      return Timer
+    case "view-record":
+    default:
+      return FileText
+  }
+}
+
+function actionToneClass(tone: "primary" | "secondary" | "danger") {
+  if (tone === "primary") {
+    return "bg-primary text-white hover:bg-primary/90"
+  }
+  if (tone === "danger") {
+    return "border border-rose-200 bg-white text-rose-700 hover:bg-rose-50"
+  }
+  return "border border-border-card bg-white text-ink hover:border-primary/30 hover:bg-soft"
+}
+
 function durationLabel(start: number, end: number) {
   const minutes = Math.max(0, end - start)
   if (minutes < 60) return `${minutes} min`
@@ -78,7 +121,7 @@ function durationLabel(start: number, end: number) {
 
 function statusChipClass(status: ApptStatus) {
   if (status === "pending" || status === "reschedule_requested") {
-    return "border-amber/25 bg-amber-tint text-amber"
+    return "border-amber/25 bg-amber-tint text-amber-800"
   }
   if (status === "confirmed" || status === "completed") {
     return "border-green/20 bg-green-tint text-green"
@@ -88,131 +131,87 @@ function statusChipClass(status: ApptStatus) {
 
 function historyFor(appointment: Appointment): HistoryStep[] {
   const requestedAt = appointment.requested_at || appointment.created_at
-  const requested: HistoryStep = {
+  const steps: HistoryStep[] = [{
     title: "Request received",
-    detail: requestedAt ? `Requested ${relativeAge(requestedAt)}` : "Request details not recorded.",
-    timestamp: timestampLabel(requestedAt) || "Timestamp not available",
-  }
+    detail: requestedAt ? `Requested ${relativeAge(requestedAt)}` : "Request date not recorded.",
+    timestamp: timestampLabel(requestedAt) || "Timestamp not recorded",
+  }]
 
   if (appointment.status === "pending") {
-    return [
-      requested,
-      {
-        title: "Awaiting review",
-        detail: "Waiting for your response.",
-        timestamp: "No decision recorded yet.",
-      },
-      {
-        title: "Accept or decline",
-        detail: "Respond using the actions below.",
-        current: true,
-      },
-    ]
-  }
-
-  if (appointment.status === "reschedule_requested") {
-    return [
-      requested,
-      {
-        title: "New time requested",
-        detail: appointment.reschedule_reason?.trim() || "The student asked for a different time. No reason was recorded.",
-        timestamp: timestampLabel(appointment.updated_at) || "Timestamp not available",
-      },
-      {
-        title: "Awaiting review",
-        detail: "Waiting for your decision on the requested time.",
-        timestamp: "No decision recorded yet.",
-      },
-      {
-        title: "Approve or reject",
-        detail: "Respond using the actions below.",
-        current: true,
-      },
-    ]
-  }
-
-  if (appointment.status === "confirmed") {
-    const steps: HistoryStep[] = [requested]
     steps.push({
-      title: "Approved",
-      detail: "Appointment confirmed.",
-      timestamp: timestampLabel(appointment.approved_at) || "Timestamp not available",
-    })
-    steps.push({
-      title: "Upcoming",
-      detail: "Awaiting the consultation.",
+      title: "Awaiting review",
+      detail: "No decision has been recorded yet.",
+      timestamp: "No decision recorded yet.",
       current: true,
     })
     return steps
   }
 
-  if (appointment.status === "completed") {
-    return [
-      requested,
-      {
-        title: "Approved",
-        detail: "Appointment confirmed.",
-        timestamp: timestampLabel(appointment.approved_at) || "Timestamp not available",
-      },
-      {
-        title: "Completed",
-        detail: "Consultation marked as completed.",
-        timestamp: timestampLabel(appointment.completed_at) || "Timestamp not available",
-        current: true,
-      },
-    ]
-  }
-
-  if (appointment.status === "cancelled") {
-    return [
-      requested,
-      {
-        title: "Cancelled",
-        detail: appointment.reason?.trim() ? `Reason: ${appointment.reason.trim()}` : "Cancelled. No reason was recorded.",
-        timestamp: timestampLabel(appointment.cancelled_at || appointment.updated_at) || "Timestamp not available",
-        current: true,
-      },
-    ]
+  if (appointment.status === "reschedule_requested") {
+    steps.push({
+      title: "Reschedule requested",
+      detail: appointment.reschedule_reason?.trim() || "No reason was recorded for the requested change.",
+      timestamp: timestampLabel(appointment.updated_at) || "Timestamp not recorded",
+      current: true,
+    })
+    return steps
   }
 
   if (appointment.status === "rejected") {
-    return [
-      requested,
-      {
-        title: "Declined",
-        detail: appointment.reason?.trim() ? `Reason: ${appointment.reason.trim()}` : "Declined. No reason was recorded.",
-        timestamp: timestampLabel(appointment.updated_at) || "Timestamp not available",
-        current: true,
-      },
-    ]
-  }
-
-  if (appointment.status === "no_show") {
-    return [
-      requested,
-      {
-        title: "Approved",
-        detail: "Appointment confirmed.",
-        timestamp: timestampLabel(appointment.approved_at) || "Timestamp not available",
-      },
-      {
-        title: "No-show",
-        detail: "Marked as no-show after the scheduled end time.",
-        timestamp: timestampLabel(appointment.updated_at) || "Timestamp not available",
-        current: true,
-      },
-    ]
-  }
-
-  return [
-    requested,
-    {
-      title: statusLabel[appointment.status],
-      detail: `Current status: ${statusLabel[appointment.status]}.`,
-      timestamp: timestampLabel(appointment.updated_at) || "Timestamp not available",
+    steps.push({
+      title: "Declined",
+      detail: appointment.reschedule_reason?.trim()
+        ? `Reason: ${appointment.reschedule_reason.trim()}`
+        : "No reason was recorded.",
+      timestamp: timestampLabel(appointment.updated_at) || "Timestamp not recorded",
       current: true,
-    },
-  ]
+    })
+    return steps
+  }
+
+  if (appointment.status === "cancelled") {
+    steps.push({
+      title: "Cancelled",
+      detail: appointment.cancellation_reason?.trim()
+        ? `Reason: ${appointment.cancellation_reason.trim()}`
+        : "No reason was recorded.",
+      timestamp: timestampLabel(appointment.cancelled_at || appointment.updated_at) || "Timestamp not recorded",
+      current: true,
+    })
+    return steps
+  }
+
+  if (["confirmed", "completed", "no_show"].includes(appointment.status)) {
+    steps.push({
+      title: "Approved",
+      detail: "Appointment confirmed.",
+      timestamp: timestampLabel(appointment.approved_at) || "Timestamp not recorded",
+    })
+  }
+
+  if (appointment.status === "completed") {
+    steps.push({
+      title: "Completed",
+      detail: "Consultation marked as completed.",
+      timestamp: timestampLabel(appointment.completed_at) || "Timestamp not recorded",
+      current: true,
+    })
+  } else if (appointment.status === "no_show") {
+    steps.push({
+      title: "No-show",
+      detail: "Marked as a no-show after the scheduled end time.",
+      timestamp: timestampLabel(appointment.updated_at) || "Timestamp not recorded",
+      current: true,
+    })
+  } else if (appointment.status === "confirmed") {
+    steps.push({
+      title: "Confirmed",
+      detail: "Awaiting the consultation.",
+      current: true,
+    })
+  }
+
+  return steps
 }
 
 function recordDate(record: ConsultationRecord) {
@@ -291,6 +290,9 @@ export function FacultyAppointmentDetailPanel({
   onCancel,
   onComplete,
   onMarkNoShow,
+  conflict,
+  actionError,
+  timeZone,
 }: {
   appointment: Appointment
   position: number
@@ -306,6 +308,9 @@ export function FacultyAppointmentDetailPanel({
   onCancel?: () => void
   onComplete?: () => void
   onMarkNoShow?: () => void
+  conflict?: string | null
+  actionError?: string
+  timeZone?: string
 }) {
   const panelRef = useRef<HTMLElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -316,6 +321,7 @@ export function FacultyAppointmentDetailPanel({
   const [reasonOverflowing, setReasonOverflowing] = useState(false)
   const [copyState, setCopyState] = useState<"idle" | "success" | "error">("idle")
   const [records, setRecords] = useState<ConsultationRecord[]>([])
+  const [currentRecord, setCurrentRecord] = useState<ConsultationRecord | null>(null)
   const [recordsLoading, setRecordsLoading] = useState(true)
   const [recordsError, setRecordsError] = useState("")
   const [recordsReload, setRecordsReload] = useState(0)
@@ -336,22 +342,51 @@ export function FacultyAppointmentDetailPanel({
   const reason = appointment.reason?.trim() || "No reason provided."
   const topic = appointment.topic?.trim() || "Consultation"
   const history = historyFor(appointment)
-  const isPending = appointment.status === "pending" || appointment.status === "reschedule_requested"
-  const isReschedule = appointment.status === "reschedule_requested"
-  const acceptLabel = isReschedule ? "Approve" : "Accept"
-  const declineLabel = isReschedule ? "Reject" : "Decline"
-  const isConfirmed = appointment.status === "confirmed"
-  const ended = consultationHasEnded(appointment.appointment_date, appointment.end_minutes)
-  const canMarkNoShow = isConfirmed && ended
-  const canComplete = isConfirmed && ended
-  const isFinal = ["completed", "cancelled", "rejected", "no_show"].includes(appointment.status)
-  const showPendingFooter = isPending
-  const showConfirmedFooter = isConfirmed && !isFinal
-  const requestedTimeLabel = `${formatDate(fromIso(appointment.appointment_date), {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  })} · ${clock(appointment.start_minutes, appointment.start_minutes >= 720 !== appointment.end_minutes >= 720)} \u2013 ${clock(appointment.end_minutes)}`
+  const ended = consultationHasEnded(
+    appointment.appointment_date,
+    appointment.end_minutes,
+    timeZone,
+  )
+  const panelState = getAppointmentPanelState(appointment, ended)
+  const isReschedule = panelState.phase === "reschedule"
+  const requestedTimeLabel = scheduleTimeLabel(
+    appointment.appointment_date,
+    appointment.start_minutes,
+    appointment.end_minutes,
+  )
+  const hasSnapshotTime =
+    Boolean(appointment.reschedule_from_date) &&
+    appointment.reschedule_from_start_minutes !== undefined &&
+    appointment.reschedule_from_start_minutes !== null &&
+    appointment.reschedule_from_end_minutes !== undefined &&
+    appointment.reschedule_from_end_minutes !== null
+  const currentTimeLabel = hasSnapshotTime
+    ? scheduleTimeLabel(
+        appointment.reschedule_from_date as string,
+        appointment.reschedule_from_start_minutes as number,
+        appointment.reschedule_from_end_minutes as number,
+      )
+    : "Current time not recorded."
+  const actionHandlers: Record<AppointmentActionId, () => void> = {
+    accept: onAccept,
+    decline: onDecline,
+    approve: onAccept,
+    reject: onDecline,
+    reschedule: onReschedule ?? (() => undefined),
+    cancel: onCancel ?? (() => undefined),
+    complete: onComplete ?? (() => undefined),
+    "no-show": onMarkNoShow ?? (() => undefined),
+    "view-record": () => onOpenRecords?.(appointment),
+  }
+  const actions = panelState.actions
+  const actionDisabled = (id: AppointmentActionId) =>
+    Boolean(busy) ||
+    (id === "reschedule" && !onReschedule) ||
+    (id === "cancel" && !onCancel) ||
+    (id === "complete" && !onComplete) ||
+    (id === "no-show" && !onMarkNoShow) ||
+    (id === "view-record" && !onOpenRecords)
+  const primaryActionId = actions.find((action) => action.tone === "primary")?.id
 
   useEffect(() => {
     panelRef.current?.focus()
@@ -382,9 +417,11 @@ export function FacultyAppointmentDetailPanel({
     setRecordsLoading(true)
     setRecordsError("")
     setRecords([])
+    setCurrentRecord(null)
     consultationApi.list({ student_id: appointment.student_id })
       .then((items) => {
         if (cancelled) return
+        setCurrentRecord(items.find((record) => record.appointment_id === appointment.id) ?? null)
         setRecords(items.filter((record) => record.appointment_id !== appointment.id))
       })
       .catch((error) => {
@@ -420,7 +457,7 @@ export function FacultyAppointmentDetailPanel({
       tabIndex={-1}
       role="region"
       aria-label="Appointment details"
-      className="panel-in flex min-h-0 w-[380px] shrink-0 flex-col overflow-hidden rounded-[16px] border border-border-card bg-white shadow-[0_1px_2px_rgba(45,27,105,0.06)] focus:outline-none"
+      className="panel-in flex min-h-0 w-[380px] shrink-0 flex-col overflow-hidden rounded-[16px] border border-border-card bg-white shadow-[0_1px_2px_rgba(45,27,105,0.06)] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
     >
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-divider px-6 py-4">
         <div className="min-w-0">
@@ -520,22 +557,60 @@ export function FacultyAppointmentDetailPanel({
             />
           </div>
           {isReschedule ? (
-            <div className="mt-3 space-y-2 rounded-[12px] border border-amber/25 bg-amber-tint px-3 py-3">
-              <div>
-                <p className="text-[12px] font-semibold text-amber">Current time</p>
-                <p className="mt-0.5 text-[13px] font-semibold text-ink">{requestedTimeLabel}</p>
+            <div className="mt-3 space-y-3 rounded-[12px] border border-amber/25 bg-amber-tint px-3 py-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <p className="text-[12px] font-semibold text-amber-800">Current time</p>
+                  <p className="mt-0.5 text-[13px] font-semibold leading-5 text-ink">{currentTimeLabel}</p>
+                </div>
+                <div>
+                  <p className="text-[12px] font-semibold text-amber-800">Requested time</p>
+                  <p className="mt-0.5 text-[13px] font-semibold leading-5 text-ink">{requestedTimeLabel}</p>
+                </div>
               </div>
               <div>
-                <p className="text-[12px] font-semibold text-amber">Requested time</p>
-                <p className="mt-0.5 text-[13px] font-semibold text-ink">Pending review - see request details</p>
-              </div>
-              <div>
-                <p className="text-[12px] font-semibold text-amber">Student note</p>
+                <p className="text-[12px] font-semibold text-amber-800">Student note</p>
                 <p className="mt-0.5 break-words text-[13px] leading-5 text-ink">
                   {appointment.reschedule_reason?.trim() || "No note provided."}
                 </p>
               </div>
-              <p className="text-[12px] leading-5 text-amber">Availability conflict will be checked on approval/rejection if applicable.</p>
+              {conflict ? (
+                <div role="alert" className="flex items-start gap-2 rounded-[10px] border border-rose-200 bg-rose-50 px-3 py-2.5">
+                  <AlertTriangle size={14} className="mt-0.5 shrink-0 text-rose-700" />
+                  <div className="min-w-0">
+                    <p className="text-[12px] font-semibold text-rose-700">Availability conflict</p>
+                    <p className="mt-0.5 break-words text-[12px] leading-5 text-rose-700">{conflict}</p>
+                  </div>
+                </div>
+              ) : conflict === "" ? (
+                <p className="rounded-[10px] border border-green/20 bg-green-tint px-3 py-2 text-[12px] font-medium text-green">
+                  No availability conflict detected.
+                </p>
+              ) : (
+                <p role="status" aria-live="polite" className="text-[12px] leading-5 text-amber-800">Checking availability conflict…</p>
+              )}
+            </div>
+          ) : null}
+          {appointment.status === "rejected" ? (
+            <div className="mt-3 rounded-[12px] border border-rose-200 bg-rose-50 px-3 py-3">
+              <p className="text-[12px] font-semibold text-rose-700">Decline reason</p>
+              <p className="mt-1 break-words text-[13px] leading-5 text-ink">
+                {appointment.reschedule_reason?.trim() || "No reason was recorded."}
+              </p>
+              <p className="mt-1 text-[12px] leading-5 text-rose-700">
+                {timestampLabel(appointment.updated_at) || "Timestamp not recorded."}
+              </p>
+            </div>
+          ) : null}
+          {appointment.status === "cancelled" ? (
+            <div className="mt-3 rounded-[12px] border border-rose-200 bg-rose-50 px-3 py-3">
+              <p className="text-[12px] font-semibold text-rose-700">Cancellation reason</p>
+              <p className="mt-1 break-words text-[13px] leading-5 text-ink">
+                {appointment.cancellation_reason?.trim() || "No reason was recorded."}
+              </p>
+              <p className="mt-1 text-[12px] leading-5 text-rose-700">
+                {timestampLabel(appointment.cancelled_at || appointment.updated_at) || "Timestamp not recorded."}
+              </p>
             </div>
           ) : null}
         </section>
@@ -569,7 +644,7 @@ export function FacultyAppointmentDetailPanel({
                 type="button"
                 aria-expanded={reasonExpanded}
                 onClick={() => setReasonExpanded((current) => !current)}
-                className="mt-1 text-[12px] font-semibold text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+                className="mt-1 rounded text-[12px] font-semibold text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
               >
                 {reasonExpanded ? "Show less" : "Show more"}
               </button>
@@ -607,10 +682,26 @@ export function FacultyAppointmentDetailPanel({
             <h2 id="panel-private-notes-heading" className="flex items-center gap-1.5 text-[12px] font-semibold text-muted">
               <Lock size={13} /> Private notes
             </h2>
+            <span className="text-[12px] font-medium text-muted">Faculty only</span>
           </div>
-          <p className="mt-3 rounded-[10px] border border-dashed border-border-card px-3 py-4 text-[12px] leading-5 text-muted">
-            Private notes are stored in consultation records and visible only to authorized faculty via server authorization.
-          </p>
+          {recordsLoading ? (
+            <div className="mt-3 animate-pulse rounded-[10px] border border-divider bg-soft/40 px-3 py-4">
+              <div className="h-3 w-2/3 rounded bg-border" />
+              <div className="mt-2 h-3 w-full rounded bg-border" />
+            </div>
+          ) : recordsError ? (
+            <p className="mt-3 rounded-[10px] border border-rose-200 bg-rose-50 px-3 py-3 text-[12px] leading-5 text-rose-700">
+              Private notes could not be loaded.
+            </p>
+          ) : currentRecord?.private_notes?.trim() ? (
+            <p className="mt-3 whitespace-pre-wrap break-words rounded-[10px] border border-border-card bg-soft/40 px-3 py-3 text-[13px] leading-6 text-ink">
+              {currentRecord.private_notes.trim()}
+            </p>
+          ) : (
+            <p className="mt-3 rounded-[10px] border border-dashed border-border-card px-3 py-4 text-[12px] leading-5 text-muted">
+              No private notes recorded for this consultation.
+            </p>
+          )}
         </section>
 
         <section aria-labelledby="panel-records-heading">
@@ -634,11 +725,11 @@ export function FacultyAppointmentDetailPanel({
             </div>
           ) : recordsError ? (
             <div className="mt-3 rounded-[10px] border border-rose-200 bg-rose-50 px-3 py-3">
-              <p className="text-[12px] leading-5 text-rose-700">{recordsError}</p>
+              <p role="alert" className="text-[12px] leading-5 text-rose-700">{recordsError}</p>
               <button
                 type="button"
                 onClick={() => setRecordsReload((value) => value + 1)}
-                className="mt-1.5 text-[12px] font-semibold text-rose-700 underline underline-offset-2"
+                className="mt-1.5 rounded text-[12px] font-semibold text-rose-700 underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
               >
                 Try again
               </button>
@@ -677,40 +768,36 @@ export function FacultyAppointmentDetailPanel({
         </section>
       </div>
 
-      {showPendingFooter ? (
+      {actions.length > 0 ? (
         <footer className="shrink-0 border-t border-divider bg-white px-6 py-4">
-          <div className="flex items-center gap-3">
-            <Button
-              type="button"
-              disabled={busy}
-              onClick={onDecline}
-              className="h-10 basis-0 flex-1 rounded-full border border-border-card bg-white text-[14px] font-semibold text-ink hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
-            >
-              {declineLabel}
-            </Button>
-            <Button
-              type="button"
-              disabled={busy}
-              onClick={onAccept}
-              className="h-10 basis-0 flex-1 rounded-full bg-primary text-[14px] font-semibold text-white hover:bg-primary/90"
-            >
-              {busy ? <Loader2 size={16} className="animate-spin" /> : acceptLabel}
-            </Button>
-          </div>
-        </footer>
-      ) : null}
-
-      {isFinal ? (
-        <footer className="shrink-0 border-t border-divider bg-white px-6 py-4">
-          <div className="flex items-center gap-3">
-            <Button
-              type="button"
-              disabled={!onOpenRecords}
-              onClick={() => onOpenRecords?.(appointment)}
-              className="h-10 basis-0 flex-1 rounded-full border border-border-card bg-white text-[14px] font-semibold text-primary hover:border-primary/30 hover:bg-soft"
-            >
-              <FileText size={16} /> View record
-            </Button>
+          {actionError ? (
+            <p role="alert" className="mb-3 rounded-[10px] border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] leading-5 text-rose-700">
+              {actionError}
+            </p>
+          ) : null}
+          <div className={`grid gap-3 ${actions.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+            {actions.map((action) => {
+              const Icon = actionIcon(action.id)
+              const isBusy = Boolean(busy) && action.id === primaryActionId
+              return (
+                <Button
+                  key={action.id}
+                  type="button"
+                  disabled={actionDisabled(action.id)}
+                  onClick={actionHandlers[action.id]}
+                  className={`h-10 gap-1.5 rounded-full px-3 text-[13px] font-semibold ${actionToneClass(action.tone)}`}
+                >
+                  {isBusy ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <>
+                      <Icon size={15} />
+                      {action.label}
+                    </>
+                  )}
+                </Button>
+              )
+            })}
           </div>
         </footer>
       ) : null}

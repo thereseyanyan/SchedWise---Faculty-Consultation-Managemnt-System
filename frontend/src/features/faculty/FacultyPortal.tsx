@@ -209,10 +209,11 @@ export function FacultyPortal({
           </Button>
         </>
       )}
-      {!drilldown && (view === "Dashboard" || view === "Today's Schedule") && <FacultyTodayView />}
+      {!drilldown && (view === "Dashboard" || view === "Today's Schedule") && (
+        <FacultyTodayView onViewAppointments={() => { setView("Appointments"); setDrilldown(null) }} />
+      )}
       {!drilldown && view === "Appointments" && (
         <FacultyAppointmentsView
-          onOpenSchedule={() => setView("Calendar & Availability")}
           onOpenRecords={() => setView("Consultation Records")}
         />
       )}

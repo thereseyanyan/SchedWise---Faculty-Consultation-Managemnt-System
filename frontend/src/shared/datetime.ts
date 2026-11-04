@@ -20,12 +20,43 @@ export const clock = (min: number, meridiem = true) => {
 }
 export const timeRange = (start: number, end: number) =>
   `${clock(start, start >= 720 !== end >= 720)} – ${clock(end)}`
-export const consultationHasEnded = (date: string, endMinutes: number) => {
-  const now = new Date()
-  const today = toIso(now)
-  if (date < today) return true
-  if (date > today) return false
-  return now.getHours() * 60 + now.getMinutes() >= endMinutes
+export const datePartsInTimeZone = (timeZone?: string, now = new Date()) => {
+  let date = toIso(now)
+  let minutes = now.getHours() * 60 + now.getMinutes()
+  if (timeZone) {
+    try {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23",
+      }).formatToParts(now)
+      const value = (type: string) => parts.find((part) => part.type === type)?.value ?? ""
+      const year = value("year")
+      const month = value("month")
+      const day = value("day")
+      const hour = Number(value("hour"))
+      const minute = Number(value("minute"))
+      if (year && month && day && Number.isFinite(hour) && Number.isFinite(minute)) {
+        date = `${year}-${month}-${day}`
+        minutes = hour * 60 + minute
+      }
+    } catch {
+      // Fall back to the browser clock when the configured zone is invalid.
+    }
+  }
+  return { date, minutes }
+}
+export const todayInTimeZone = (timeZone?: string, now = new Date()) =>
+  datePartsInTimeZone(timeZone, now).date
+export const consultationHasEnded = (date: string, endMinutes: number, timeZone?: string) => {
+  const now = datePartsInTimeZone(timeZone)
+  if (date < now.date) return true
+  if (date > now.date) return false
+  return now.minutes >= endMinutes
 }
 
 export const localZone = (() => {

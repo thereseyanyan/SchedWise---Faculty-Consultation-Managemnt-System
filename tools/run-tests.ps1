@@ -7,6 +7,9 @@ param(
 $ErrorActionPreference = 'Stop'
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 $TestFile = Join-Path $ProjectRoot 'tests\api.test.mjs'
+$StateTestFile = Join-Path $ProjectRoot 'frontend\tests\appointment-state.test.mjs'
+$DialogStateTestFile = Join-Path $ProjectRoot 'frontend\tests\appointment-dialog-state.test.mjs'
+$BulkStateTestFile = Join-Path $ProjectRoot 'frontend\tests\appointment-bulk-state.test.mjs'
 
 function Find-Php {
     $candidates = @(
@@ -69,6 +72,12 @@ if (-not (Test-App) -or -not (Test-Mailpit)) {
 $php = Find-Php
 $node = Find-Node
 $env:SCHEDWISE_PHP = $php
+
+Write-Host 'Running appointment state tests...'
+& $node --test $StateTestFile $DialogStateTestFile $BulkStateTestFile
+if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+}
 
 Write-Host 'Running SchedWise API tests...'
 & $node --test $TestFile

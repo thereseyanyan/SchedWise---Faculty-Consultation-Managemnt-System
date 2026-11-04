@@ -1,5 +1,5 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react"
-import type { FormEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react"
+﻿import { useContext, useEffect, useMemo, useRef, useState } from "react"
+import type { MouseEvent as ReactMouseEvent, ReactNode } from "react"
 import { createPortal } from "react-dom"
 import {
   AlertCircle,
@@ -24,13 +24,14 @@ import {
 } from "lucide-react"
 import {
   appointmentApi,
+  facultyAvailabilityApi,
+  facultyScheduleOverridesApi,
   type Appointment,
   type ApptStatus,
 } from "../../api"
-import { confirmAction } from "../../confirmation"
 import {
   Button,
-  TextareaTag,
+  CurrentUserContext,
   clock,
   consultationHasEnded,
   errorMessage,
@@ -39,18 +40,42 @@ import {
   fullName,
   mergeAppointment,
   statusLabel,
-  toIso,
+  todayInTimeZone,
 } from "../../shared"
 import { FacultyAppointmentDetailPanel } from "./FacultyAppointmentDetailPanel"
+import {
+  AcceptAppointmentDialog,
+  BulkDeclineAppointmentsDialog,
+  CancelAppointmentDialog,
+  ChooseNewTimeDialog,
+  ConfirmAppointmentDialog,
+  DeclineAppointmentDialog,
+} from "./FacultyAppointmentDialogs"
+import {
+  bulkEligibleAppointments,
+  canBulkAct,
+  nextAppointmentIndex,
+  previousAppointmentIndex,
+  resolveShortcutTarget,
+  runBulkAppointmentAction,
+  type BulkActionId,
+  type BulkOutcome,
+} from "./appointmentBulkState"
+import {
+  facultyScheduleAllows,
+  findAppointmentConflict,
+} from "./appointmentPanelState"
 
 type TabKey = "all" | "pending" | "upcoming" | "past" | "closed"
 type QuickView = "" | "response" | "closing" | "today"
 type Density = "comfortable" | "compact"
 type SortKey = "date-asc" | "date-desc" | "student" | "status"
-type ReasonAction = {
-  appointment: Appointment
-  kind: "decline" | "reject" | "cancel"
-}
+type AppointmentDialog =
+  | { kind: "accept"; appointment: Appointment }
+  | { kind: "decline"; appointment: Appointment }
+  | { kind: "cancel"; appointment: Appointment }
+  | { kind: "reschedule"; appointment: Appointment }
+  | { kind: "confirm"; appointment: Appointment; action: "complete" | "no-show" }
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "all", label: "All" },
@@ -73,6 +98,10 @@ const STATUS_OPTIONS: ApptStatus[] = [
 const PENDING_STATUSES: ApptStatus[] = ["pending", "reschedule_requested"]
 const CLOSED_STATUSES: ApptStatus[] = ["cancelled", "rejected", "no_show"]
 
+// Quick views are defined by the existing rules below:
+// Needs my response: pending or reschedule_requested.
+// Needs closing: confirmed appointments whose end time has passed in the application timezone.
+// Today: appointment_date is today in the application timezone and the status is not cancelled.
 function isPendingStatus(status: ApptStatus) {
   return PENDING_STATUSES.includes(status)
 }
@@ -81,21 +110,21 @@ function isClosedStatus(status: ApptStatus) {
   return CLOSED_STATUSES.includes(status)
 }
 
-function needsClosing(appointment: Appointment) {
+function needsClosing(appointment: Appointment, timeZone?: string) {
   return appointment.status === "confirmed" &&
-    consultationHasEnded(appointment.appointment_date, appointment.end_minutes)
+    consultationHasEnded(appointment.appointment_date, appointment.end_minutes, timeZone)
 }
 
-function tabFor(appointment: Appointment): Exclude<TabKey, "all"> {
+function tabFor(appointment: Appointment, timeZone?: string): Exclude<TabKey, "all"> {
   if (isPendingStatus(appointment.status)) return "pending"
   if (isClosedStatus(appointment.status)) return "closed"
   if (appointment.status === "completed") return "past"
-  if (needsClosing(appointment)) return "past"
+  if (needsClosing(appointment, timeZone)) return "past"
   return "upcoming"
 }
 
 function statusChipClass(status: ApptStatus) {
-  if (isPendingStatus(status)) return "border-amber/25 bg-amber-tint text-amber"
+  if (isPendingStatus(status)) return "border-amber/25 bg-amber-tint text-amber-800"
   if (status === "confirmed") return "border-green/20 bg-green-tint text-green"
   if (status === "completed") return "border-border bg-soft text-primary"
   return "border-rose-200 bg-rose-50 text-rose-700"
@@ -187,11 +216,9 @@ function ActionSlot({ children }: { children?: ReactNode }) {
 }
 
 export function FacultyAppointmentsView({
-  onOpenSchedule,
   onOpenRecords,
   onOpenAppointment,
 }: {
-  onOpenSchedule?: (appointment?: Appointment) => void
   onOpenRecords?: (appointment?: Appointment) => void
   onOpenAppointment?: (appointment: Appointment) => void
 }) {
@@ -208,12 +235,17 @@ export function FacultyAppointmentsView({
   const [sort, setSort] = useState<SortKey>("date-asc")
   const [density, setDensity] = useState<Density>("comfortable")
   const [page, setPage] = useState(1)
-  const [busyId, setBusyId] = useState("")
   const [selectedId, setSelectedId] = useState("")
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const [bulkDeclineTargets, setBulkDeclineTargets] = useState<Appointment[] | null>(null)
+  const [bulkFeedback, setBulkFeedback] = useState<{
+    tone: "success" | "error"
+    message: string
+  } | null>(null)
+  const [panelConflict, setPanelConflict] = useState<string | null>(null)
   const [openPopover, setOpenPopover] = useState<"date" | "filter" | null>(null)
-  const [reasonAction, setReasonAction] = useState<ReasonAction | null>(null)
-  const [reason, setReason] = useState("")
-  const [reasonError, setReasonError] = useState("")
+  const [dialog, setDialog] = useState<AppointmentDialog | null>(null)
   const [menu, setMenu] = useState<{
     appointment: Appointment
     top: number
@@ -221,9 +253,17 @@ export function FacultyAppointmentsView({
   } | null>(null)
   const toolbarRef = useRef<HTMLDivElement>(null)
   const pageFocusRef = useRef<HTMLDivElement>(null)
-  const reasonRef = useRef<HTMLTextAreaElement>(null)
-  const today = toIso(new Date())
+  const selectAllRef = useRef<HTMLInputElement>(null)
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([])
+  const datePopoverTriggerRef = useRef<HTMLButtonElement>(null)
+  const filterPopoverTriggerRef = useRef<HTMLButtonElement>(null)
+  const menuTriggerRef = useRef<HTMLButtonElement>(null)
+  const menuItemsRef = useRef<HTMLDivElement>(null)
+  const currentUser = useContext(CurrentUserContext)
+  const timeZone = currentUser?.timezone
+  const today = todayInTimeZone(timeZone)
   const pageSize = density === "comfortable" ? 8 : 10
+  const canBulkManage = currentUser?.role_id === "faculty" || currentUser?.role_id === "admin"
 
   const loadAppointments = async () => {
     setLoading(true)
@@ -253,8 +293,18 @@ export function FacultyAppointmentsView({
     }
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setOpenPopover(null)
-        setMenu(null)
+        if (menu) {
+          setMenu(null)
+          window.requestAnimationFrame(() => menuTriggerRef.current?.focus())
+          return
+        }
+        if (openPopover) {
+          const trigger = openPopover === "date"
+            ? datePopoverTriggerRef.current
+            : filterPopoverTriggerRef.current
+          setOpenPopover(null)
+          trigger?.focus()
+        }
       }
     }
     const closeMenu = () => setMenu(null)
@@ -268,11 +318,14 @@ export function FacultyAppointmentsView({
       window.removeEventListener("scroll", closeMenu, true)
       window.removeEventListener("resize", closeMenu)
     }
-  }, [])
+  }, [menu, openPopover])
 
   useEffect(() => {
-    if (reasonAction) reasonRef.current?.focus()
-  }, [reasonAction])
+    if (!menu) return
+    window.requestAnimationFrame(() => {
+      menuItemsRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus()
+    })
+  }, [menu])
 
   const searchNormalized = query.trim().toLowerCase()
   const searched = useMemo(() => rows.filter((appointment) => {
@@ -304,14 +357,14 @@ export function FacultyAppointmentsView({
       past: 0,
       closed: 0,
     }
-    for (const appointment of dateScoped) result[tabFor(appointment)] += 1
+    for (const appointment of dateScoped) result[tabFor(appointment, timeZone)] += 1
     return result
-  }, [dateScoped])
+  }, [dateScoped, timeZone])
 
   const needsReviewCount = counts.pending
   const needsClosingCount = useMemo(
-    () => dateScoped.filter(needsClosing).length,
-    [dateScoped],
+    () => dateScoped.filter((appointment) => needsClosing(appointment, timeZone)).length,
+    [dateScoped, timeZone],
   )
   const todayViewCount = useMemo(
     () => dateScoped.filter((appointment) =>
@@ -322,9 +375,9 @@ export function FacultyAppointmentsView({
 
   const filtered = useMemo(() => {
     let result = dateScoped
-    if (tab !== "all") result = result.filter((appointment) => tabFor(appointment) === tab)
+    if (tab !== "all") result = result.filter((appointment) => tabFor(appointment, timeZone) === tab)
     if (quickView === "response") result = result.filter((appointment) => isPendingStatus(appointment.status))
-    if (quickView === "closing") result = result.filter(needsClosing)
+    if (quickView === "closing") result = result.filter((appointment) => needsClosing(appointment, timeZone))
     if (quickView === "today") {
       result = result.filter((appointment) =>
         appointment.appointment_date === today && appointment.status !== "cancelled"
@@ -343,20 +396,109 @@ export function FacultyAppointmentsView({
       return (a.appointment_date.localeCompare(b.appointment_date) ||
         a.start_minutes - b.start_minutes) * direction
     })
-  }, [dateScoped, tab, quickView, statusFilter, sort, today])
+  }, [dateScoped, tab, quickView, statusFilter, sort, today, timeZone])
 
   useEffect(() => {
     setPage(1)
   }, [query, tab, quickView, dateFrom, dateTo, sort, density, statusFilter.join("|")])
 
+  useEffect(() => {
+    setSelectedIds(new Set())
+  }, [query, tab, quickView, dateFrom, dateTo, statusFilter.join("|")])
+
   const selectedIndex = selectedId
     ? filtered.findIndex((appointment) => appointment.id === selectedId)
     : -1
   const selectedAppointment = selectedIndex >= 0 ? filtered[selectedIndex] : null
+  const bulkEligibleRows = useMemo(
+    () => bulkEligibleAppointments(filtered, "accept"),
+    [filtered],
+  )
+  const selectedAppointments = useMemo(
+    () => filtered.filter((appointment) =>
+      selectedIds.has(appointment.id) && canBulkAct("accept", appointment)
+    ),
+    [filtered, selectedIds],
+  )
+  const allEligibleSelected = bulkEligibleRows.length > 0 &&
+    bulkEligibleRows.every((appointment) => selectedIds.has(appointment.id))
+  const someEligibleSelected = bulkEligibleRows.some((appointment) =>
+    selectedIds.has(appointment.id)
+  )
+
+  useEffect(() => {
+    setSelectedIds((current) => {
+      if (current.size === 0) return current
+      const next = new Set<string>()
+      for (const appointment of filtered) {
+        if (current.has(appointment.id) && canBulkAct("accept", appointment)) {
+          next.add(appointment.id)
+        }
+      }
+      if (next.size === current.size) return current
+      return next
+    })
+  }, [filtered])
+
+  useEffect(() => {
+    if (!selectAllRef.current) return
+    selectAllRef.current.indeterminate = someEligibleSelected && !allEligibleSelected
+  }, [someEligibleSelected, allEligibleSelected])
 
   useEffect(() => {
     if (selectedId && selectedIndex < 0) setSelectedId("")
   }, [selectedId, selectedIndex])
+
+  useEffect(() => {
+    if (!selectedAppointment || selectedAppointment.status !== "reschedule_requested") {
+      setPanelConflict(null)
+      return
+    }
+    const appointment = selectedAppointment
+    let cancelled = false
+    setPanelConflict(null)
+    Promise.all([
+      facultyAvailabilityApi.list({ faculty_id: appointment.faculty_id }),
+      facultyScheduleOverridesApi.list({
+        faculty_id: appointment.faculty_id,
+        date: appointment.appointment_date,
+      }),
+    ]).then(([availability, overrides]) => {
+      if (cancelled) return
+      const conflict = findAppointmentConflict(appointment, rows)
+      if (conflict) {
+        const schedule = scheduleLabel(conflict)
+        setPanelConflict(
+          `Overlaps with ${studentName(conflict)} on ${schedule.date} at ${schedule.time}.`,
+        )
+        return
+      }
+      if (!facultyScheduleAllows(
+        appointment.appointment_date,
+        appointment.start_minutes,
+        appointment.end_minutes,
+        availability,
+        overrides,
+      )) {
+        setPanelConflict("The requested time is outside your available schedule.")
+        return
+      }
+      setPanelConflict("")
+    }).catch((err) => {
+      if (!cancelled) setPanelConflict(errorMessage(err, "Unable to check availability."))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [
+    selectedAppointment?.id,
+    selectedAppointment?.status,
+    selectedAppointment?.appointment_date,
+    selectedAppointment?.start_minutes,
+    selectedAppointment?.end_minutes,
+    selectedAppointment?.faculty_id,
+    rows,
+  ])
 
   const selectAppointment = (appointment: Appointment) => {
     const index = filtered.findIndex((row) => row.id === appointment.id)
@@ -384,13 +526,158 @@ export function FacultyAppointmentsView({
   useEffect(() => {
     if (!selectedId) return
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || reasonAction || menu || openPopover) return
+      if (event.key !== "Escape" || dialog || menu || openPopover) return
       event.preventDefault()
       closePanel()
     }
     document.addEventListener("keydown", onKeyDown)
     return () => document.removeEventListener("keydown", onKeyDown)
-  }, [selectedId, reasonAction, menu, openPopover])
+  }, [selectedId, dialog, menu, openPopover])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return
+      if (dialog || menu || openPopover || bulkDeclineTargets || bulkBusy) return
+      const target = event.target
+      if (target instanceof HTMLElement) {
+        const tag = target.tagName
+        if (
+          tag === "INPUT" ||
+          tag === "TEXTAREA" ||
+          tag === "SELECT" ||
+          target.isContentEditable ||
+          target.closest("button, a, [role='button'], [role='menuitem']")
+        ) return
+      }
+      const key = event.key.toLowerCase()
+      if (key === "j" || key === "k") {
+        if (filtered.length === 0) return
+        event.preventDefault()
+        selectByIndex(
+          key === "j"
+            ? nextAppointmentIndex(selectedIndex, filtered.length)
+            : previousAppointmentIndex(selectedIndex, filtered.length),
+        )
+        return
+      }
+      if (key !== "a" && key !== "d") return
+      const action: BulkActionId = key === "a" ? "accept" : "decline"
+      const appointment = resolveShortcutTarget(filtered, selectedId, action)
+      if (!appointment) return
+      event.preventDefault()
+      setDialog({ kind: action, appointment })
+    }
+    document.addEventListener("keydown", onKeyDown)
+    return () => document.removeEventListener("keydown", onKeyDown)
+  }, [dialog, menu, openPopover, bulkDeclineTargets, bulkBusy, filtered, selectedId, selectedIndex])
+
+  const toggleSelection = (appointment: Appointment) => {
+    if (!canBulkManage || !canBulkAct("accept", appointment)) return
+    setSelectedIds((current) => {
+      const next = new Set(current)
+      if (next.has(appointment.id)) next.delete(appointment.id)
+      else next.add(appointment.id)
+      return next
+    })
+  }
+
+  const toggleAllEligible = () => {
+    if (!canBulkManage) return
+    setSelectedIds((current) => {
+      const next = new Set(current)
+      if (allEligibleSelected) {
+        for (const appointment of bulkEligibleRows) next.delete(appointment.id)
+      } else {
+        for (const appointment of bulkEligibleRows) next.add(appointment.id)
+      }
+      return next
+    })
+  }
+
+  const clearSelection = () => setSelectedIds(new Set())
+
+  const applyBulkOutcome = (action: BulkActionId, outcome: BulkOutcome) => {
+    if (outcome.succeeded.length > 0) {
+      const updatedById = new Map(
+        outcome.succeeded.map((appointment) => [appointment.id, appointment]),
+      )
+      setRows((current) => current.map((row) => {
+        const updated = updatedById.get(row.id)
+        return updated ? { ...row, ...updated } : row
+      }))
+      for (const updated of outcome.succeeded) mergeAppointment(updated)
+    }
+    setSelectedIds((current) => {
+      const next = new Set(current)
+      for (const updated of outcome.succeeded) next.delete(updated.id)
+      return next
+    })
+
+    const total = outcome.succeeded.length + outcome.failed.length + outcome.skipped.length
+    const done = action === "accept" ? "Accepted" : "Declined"
+    const passive = action === "accept" ? "accepted" : "declined"
+    if (outcome.failed.length === 0 && outcome.skipped.length === 0) {
+      setBulkFeedback({
+        tone: "success",
+        message: `${done} ${outcome.succeeded.length} ${outcome.succeeded.length === 1 ? "request" : "requests"}.`,
+      })
+    } else if (outcome.succeeded.length === 0) {
+      setBulkFeedback({
+        tone: "error",
+        message: outcome.failed.length > 0
+          ? `No requests were ${passive}. ${outcome.failed[0].error}`
+          : `No requests were ${passive} because they were no longer actionable.`,
+      })
+    } else {
+      const failureDetails = outcome.failed.slice(0, 2)
+        .map((failure) => `${studentName(failure.appointment)}: ${failure.error}`)
+        .join(" ")
+      setBulkFeedback({
+        tone: "error",
+        message: `${done} ${outcome.succeeded.length} of ${total} requests.${failureDetails ? ` ${failureDetails}` : ""}${outcome.skipped.length > 0 ? ` ${outcome.skipped.length} were no longer actionable.` : ""}`,
+      })
+    }
+    if (outcome.failed.length > 0) void loadAppointments()
+  }
+
+  const runBulkAccept = async () => {
+    if (bulkBusy || !canBulkManage) return
+    const targets = selectedAppointments.filter((appointment) =>
+      canBulkAct("accept", appointment)
+    )
+    if (targets.length === 0) return
+    setBulkBusy(true)
+    setBulkFeedback(null)
+    setNotice("")
+    setError("")
+    try {
+      const outcome = await runBulkAppointmentAction(
+        targets,
+        "accept",
+        (appointment) => appointmentApi.approve(appointment.id),
+        (appointment, err) => errorMessage(
+          err,
+          `Unable to accept ${studentName(appointment)}.`,
+        ),
+      )
+      applyBulkOutcome("accept", outcome)
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  const runBulkDecline = async (reason: string) => {
+    const targets = bulkDeclineTargets ?? []
+    return runBulkAppointmentAction(
+      targets,
+      "decline",
+      (appointment) => appointmentApi.reject(appointment.id, reason),
+      (appointment, err) => errorMessage(
+        err,
+        `Unable to decline ${studentName(appointment)}.`,
+      ),
+    )
+  }
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const currentPage = Math.min(page, totalPages)
@@ -398,7 +685,7 @@ export function FacultyAppointmentsView({
   const firstRow = filtered.length === 0 ? 0 : (currentPage - 1) * pageSize + 1
   const lastRow = Math.min(currentPage * pageSize, filtered.length)
   const hasFilters = Boolean(
-    query.trim() || dateFrom || dateTo || quickView || statusFilter.length > 0,
+    query.trim() || dateFrom || dateTo || quickView || tab !== "all" || statusFilter.length > 0,
   )
   const filterCount = statusFilter.length
 
@@ -413,6 +700,12 @@ export function FacultyAppointmentsView({
 
   const updateRow = (updated: Appointment) => {
     setRows((current) => current.map((row) => row.id === updated.id ? { ...row, ...updated } : row))
+    setSelectedIds((current) => {
+      if (!current.has(updated.id) || canBulkAct("accept", updated)) return current
+      const next = new Set(current)
+      next.delete(updated.id)
+      return next
+    })
     mergeAppointment(updated)
   }
 
@@ -423,94 +716,6 @@ export function FacultyAppointmentsView({
       window.dispatchEvent(new CustomEvent("schedwise:appointment-open", {
         detail: { appointmentId: appointment.id },
       }))
-    }
-  }
-
-  const openSchedule = (appointment: Appointment) => {
-    if (onOpenSchedule) onOpenSchedule(appointment)
-    else {
-      window.dispatchEvent(new CustomEvent("schedwise:appointment-reschedule", {
-        detail: { appointmentId: appointment.id },
-      }))
-    }
-  }
-
-  const approve = async (appointment: Appointment) => {
-    const label = appointment.status === "reschedule_requested"
-      ? "Approve the requested time"
-      : "Accept this appointment request"
-    if (!await confirmAction(`${label} from ${studentName(appointment)}?`)) return
-    setBusyId(appointment.id)
-    setError("")
-    try {
-      updateRow(await appointmentApi.approve(appointment.id))
-      setNotice(`Appointment approved for ${studentName(appointment)}.`)
-    } catch (err) {
-      setError(errorMessage(err, "Unable to approve this appointment."))
-    } finally {
-      setBusyId("")
-    }
-  }
-
-  const complete = async (appointment: Appointment) => {
-    if (!await confirmAction(`Mark this consultation with ${studentName(appointment)} as completed?`)) return
-    setBusyId(appointment.id)
-    setError("")
-    try {
-      updateRow(await appointmentApi.complete(appointment.id))
-      setNotice(`Consultation completed for ${studentName(appointment)}.`)
-    } catch (err) {
-      setError(errorMessage(err, "Unable to complete this appointment."))
-    } finally {
-      setBusyId("")
-    }
-  }
-
-  const markNoShow = async (appointment: Appointment) => {
-    if (!await confirmAction(`Mark ${studentName(appointment)} as a no-show for this consultation?`)) return
-    setBusyId(appointment.id)
-    setError("")
-    try {
-      updateRow(await appointmentApi.noShow(appointment.id))
-      setNotice(`No-show recorded for ${studentName(appointment)}.`)
-    } catch (err) {
-      setError(errorMessage(err, "Unable to record this no-show."))
-    } finally {
-      setBusyId("")
-    }
-  }
-
-  const openReasonDialog = (appointment: Appointment, kind: ReasonAction["kind"]) => {
-    setReason("")
-    setReasonError("")
-    setReasonAction({ appointment, kind })
-  }
-
-  const submitReason = async (event: FormEvent) => {
-    event.preventDefault()
-    if (!reasonAction) return
-    if (!reason.trim()) {
-      setReasonError("Enter a short reason so the student knows what changed.")
-      return
-    }
-    setBusyId(reasonAction.appointment.id)
-    setReasonError("")
-    try {
-      const updated = reasonAction.kind === "cancel"
-        ? await appointmentApi.cancel(reasonAction.appointment.id, reason.trim())
-        : await appointmentApi.reject(reasonAction.appointment.id, reason.trim())
-      updateRow(updated)
-      setNotice(
-        reasonAction.kind === "cancel"
-          ? `Appointment cancelled for ${studentName(reasonAction.appointment)}.`
-          : `Request declined for ${studentName(reasonAction.appointment)}.`,
-      )
-      setReasonAction(null)
-      setReason("")
-    } catch (err) {
-      setReasonError(errorMessage(err, "Unable to update this appointment."))
-    } finally {
-      setBusyId("")
     }
   }
 
@@ -525,27 +730,26 @@ export function FacultyAppointmentsView({
     ]
     if (appointment.status === "pending" || appointment.status === "reschedule_requested") {
       items.push(
-        { label: "Reschedule", icon: <CalendarClock size={15} />, run: () => openSchedule(appointment) },
-        { label: "Cancel appointment", icon: <X size={15} />, danger: true, run: () => openReasonDialog(appointment, "cancel") },
+        { label: "Reschedule", icon: <CalendarClock size={15} />, run: () => setDialog({ kind: "reschedule", appointment }) },
+        { label: "Cancel appointment", icon: <X size={15} />, danger: true, run: () => setDialog({ kind: "cancel", appointment }) },
       )
     } else if (appointment.status === "confirmed") {
-      items.push(
-        { label: "Mark completed", icon: <Check size={15} />, run: () => { void complete(appointment) } },
-      )
-      if (consultationHasEnded(appointment.appointment_date, appointment.end_minutes)) {
+      if (needsClosing(appointment, timeZone)) {
         items.push(
-          { label: "Mark no-show", icon: <AlertCircle size={15} />, danger: true, run: () => { void markNoShow(appointment) } },
+          { label: "Mark completed", icon: <Check size={15} />, run: () => setDialog({ kind: "confirm", appointment, action: "complete" }) },
+          { label: "Mark no-show", icon: <AlertCircle size={15} />, danger: true, run: () => setDialog({ kind: "confirm", appointment, action: "no-show" }) },
         )
       }
       items.push(
-        { label: "Reschedule", icon: <CalendarClock size={15} />, run: () => openSchedule(appointment) },
-        { label: "Cancel appointment", icon: <X size={15} />, danger: true, run: () => openReasonDialog(appointment, "cancel") },
+        { label: "Reschedule", icon: <CalendarClock size={15} />, run: () => setDialog({ kind: "reschedule", appointment }) },
+        { label: "Cancel appointment", icon: <X size={15} />, danger: true, run: () => setDialog({ kind: "cancel", appointment }) },
       )
     }
     return items
   }
 
   const openRowMenu = (event: ReactMouseEvent<HTMLButtonElement>, appointment: Appointment) => {
+    menuTriggerRef.current = event.currentTarget
     const rect = event.currentTarget.getBoundingClientRect()
     const itemCount = menuItemsFor(appointment).length
     const width = 208
@@ -559,13 +763,13 @@ export function FacultyAppointmentsView({
   }
 
   const renderActions = (appointment: Appointment) => {
-    const isBusy = busyId === appointment.id
     const more = (
       <button
         type="button"
         aria-label={`More actions for ${studentName(appointment)}`}
         title={`More actions for ${studentName(appointment)}`}
-        disabled={isBusy}
+        aria-haspopup="menu"
+        aria-expanded={menu?.appointment.id === appointment.id}
         onClick={(event) => openRowMenu(event, appointment)}
         className="flex size-8 items-center justify-center rounded-full border border-border-card bg-white text-muted transition hover:border-primary/30 hover:bg-soft hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
       >
@@ -580,18 +784,16 @@ export function FacultyAppointmentsView({
             <IconAction
               label={`${appointment.status === "reschedule_requested" ? "Approve requested time" : "Accept appointment for"} ${studentName(appointment)}`}
               tone="success"
-              disabled={isBusy}
-              onClick={() => { void approve(appointment) }}
+              onClick={() => setDialog({ kind: "accept", appointment })}
             >
-              {isBusy ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+              <Check size={16} />
             </IconAction>
           </ActionSlot>
           <ActionSlot>
             <IconAction
               label={`${appointment.status === "reschedule_requested" ? "Reject requested time for" : "Decline appointment for"} ${studentName(appointment)}`}
               tone="danger"
-              disabled={isBusy}
-              onClick={() => openReasonDialog(appointment, appointment.status === "reschedule_requested" ? "reject" : "decline")}
+              onClick={() => setDialog({ kind: "decline", appointment })}
             >
               <X size={16} />
             </IconAction>
@@ -608,8 +810,7 @@ export function FacultyAppointmentsView({
             <IconAction
               label={`Reschedule appointment for ${studentName(appointment)}`}
               tone="primary"
-              disabled={isBusy}
-              onClick={() => openSchedule(appointment)}
+              onClick={() => setDialog({ kind: "reschedule", appointment })}
             >
               <CalendarClock size={16} />
             </IconAction>
@@ -618,8 +819,7 @@ export function FacultyAppointmentsView({
             <IconAction
               label={`Cancel appointment for ${studentName(appointment)}`}
               tone="danger"
-              disabled={isBusy}
-              onClick={() => openReasonDialog(appointment, "cancel")}
+              onClick={() => setDialog({ kind: "cancel", appointment })}
             >
               <X size={16} />
             </IconAction>
@@ -667,15 +867,6 @@ export function FacultyAppointmentsView({
     )
   }
 
-  const reasonTitle = reasonAction?.kind === "cancel"
-    ? "Cancel appointment"
-    : reasonAction?.kind === "reject"
-      ? "Reject requested time"
-      : "Decline appointment request"
-  const reasonDescription = reasonAction
-    ? `${studentName(reasonAction.appointment)} \u00b7 ${scheduleLabel(reasonAction.appointment).date} \u00b7 ${scheduleLabel(reasonAction.appointment).time}`
-    : ""
-
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -684,17 +875,31 @@ export function FacultyAppointmentsView({
           aria-label="Appointment categories"
           className="flex min-w-0 flex-wrap items-center gap-1 rounded-[12px] bg-white p-1 ring-1 ring-border-card"
         >
-          {TABS.map((item) => {
+          {TABS.map((item, index) => {
             const active = tab === item.key
             return (
               <button
                 key={item.key}
+                ref={(element) => { tabRefs.current[index] = element }}
                 type="button"
                 role="tab"
+                tabIndex={active ? 0 : -1}
                 aria-selected={active}
                 onClick={() => {
                   setTab(item.key)
                   setQuickView("")
+                }}
+                onKeyDown={(event) => {
+                  let nextIndex = index
+                  if (event.key === "ArrowRight") nextIndex = (index + 1) % TABS.length
+                  else if (event.key === "ArrowLeft") nextIndex = (index - 1 + TABS.length) % TABS.length
+                  else if (event.key === "Home") nextIndex = 0
+                  else if (event.key === "End") nextIndex = TABS.length - 1
+                  else return
+                  event.preventDefault()
+                  setTab(TABS[nextIndex].key)
+                  setQuickView("")
+                  tabRefs.current[nextIndex]?.focus()
                 }}
                 className={`inline-flex h-9 items-center gap-2 rounded-[8px] px-3 text-[13px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] ${
                   active ? "bg-primary text-white" : "text-muted hover:bg-soft hover:text-ink"
@@ -713,7 +918,7 @@ export function FacultyAppointmentsView({
           })}
         </div>
         {needsReviewCount > 0 ? (
-          <span className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-full bg-amber-tint px-3 text-[12px] font-semibold text-amber">
+          <span className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-full bg-amber-tint px-3 text-[12px] font-semibold text-amber-800">
             <AlertCircle size={14} />
             {needsReviewCount} need your review
           </span>
@@ -739,7 +944,7 @@ export function FacultyAppointmentsView({
               type="button"
               aria-label="Clear appointment search"
               onClick={() => setQuery("")}
-              className="absolute right-2.5 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-full text-muted transition hover:bg-soft hover:text-ink"
+              className="absolute right-2.5 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-full text-muted transition hover:bg-soft hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
             >
               <X size={13} />
             </button>
@@ -748,11 +953,12 @@ export function FacultyAppointmentsView({
 
         <div className="relative">
           <button
+            ref={datePopoverTriggerRef}
             type="button"
             aria-label="Choose appointment date range"
             aria-expanded={openPopover === "date"}
             onClick={() => setOpenPopover(openPopover === "date" ? null : "date")}
-            className={`inline-flex h-10 items-center gap-2 rounded-[10px] border px-3 text-[13px] font-semibold transition ${
+            className={`inline-flex h-10 items-center gap-2 rounded-[10px] border px-3 text-[13px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] ${
               dateFrom || dateTo
                 ? "border-primary bg-soft text-primary"
                 : "border-border-card bg-white text-muted hover:border-primary/30 hover:text-primary"
@@ -793,14 +999,14 @@ export function FacultyAppointmentsView({
                     setDateFrom("")
                     setDateTo("")
                   }}
-                  className="text-[12px] font-semibold text-muted underline-offset-2 hover:text-primary hover:underline"
+                  className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] text-[12px] font-semibold text-muted underline-offset-2 hover:text-primary hover:underline"
                 >
                   Clear dates
                 </button>
                 <button
                   type="button"
                   onClick={() => setOpenPopover(null)}
-                  className="inline-flex h-8 items-center rounded-full bg-primary px-3 text-[12px] font-semibold text-white transition hover:opacity-90"
+                  className="inline-flex h-8 items-center rounded-full bg-primary px-3 text-[12px] font-semibold text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2"
                 >
                   Done
                 </button>
@@ -811,11 +1017,12 @@ export function FacultyAppointmentsView({
 
         <div className="relative">
           <button
+            ref={filterPopoverTriggerRef}
             type="button"
             aria-label="Filter appointments"
             aria-expanded={openPopover === "filter"}
             onClick={() => setOpenPopover(openPopover === "filter" ? null : "filter")}
-            className={`inline-flex h-10 items-center gap-2 rounded-[10px] border px-3 text-[13px] font-semibold transition ${
+            className={`inline-flex h-10 items-center gap-2 rounded-[10px] border px-3 text-[13px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] ${
               filterCount > 0
                 ? "border-primary bg-soft text-primary"
                 : "border-border-card bg-white text-muted hover:border-primary/30 hover:text-primary"
@@ -862,7 +1069,7 @@ export function FacultyAppointmentsView({
                   type="button"
                   disabled={filterCount === 0}
                   onClick={() => setStatusFilter([])}
-                  className="w-full rounded-[8px] px-2 py-2 text-left text-[12px] font-semibold text-muted transition hover:bg-soft hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                  className="w-full rounded-[8px] px-2 py-2 text-left text-[12px] font-semibold text-muted transition hover:bg-soft hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Clear status filters
                 </button>
@@ -923,6 +1130,12 @@ export function FacultyAppointmentsView({
 
       {hasFilters ? (
         <div className="mt-3 flex flex-wrap items-center gap-2">
+          {tab !== "all" ? (
+            <FilterChip
+              label={TABS.find((item) => item.key === tab)?.label ?? tab}
+              onClear={() => setTab("all")}
+            />
+          ) : null}
           {quickView ? (
             <FilterChip
               label={
@@ -945,10 +1158,58 @@ export function FacultyAppointmentsView({
           <button
             type="button"
             onClick={clearFilters}
-            className="text-[12px] font-semibold text-muted underline-offset-2 transition hover:text-primary hover:underline"
+            className="rounded text-[12px] font-semibold text-muted underline-offset-2 transition hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
           >
             Clear all
           </button>
+        </div>
+      ) : null}
+
+      {canBulkManage && selectedAppointments.length > 0 ? (
+        <div
+          role="region"
+          aria-label="Bulk appointment actions"
+          className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-primary/20 bg-soft px-3 py-2"
+        >
+          <div className="min-w-0">
+            <p className="text-[13px] font-semibold text-ink">
+              {selectedAppointments.length} selected{" "}
+              <span className="font-normal text-muted">in this filtered view</span>
+            </p>
+            <p className="mt-0.5 text-[12px] leading-4 text-muted">
+              Only pending and reschedule requests can be changed. Final-state records are excluded.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              disabled={bulkBusy}
+              onClick={() => { void runBulkAccept() }}
+              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-primary px-3 text-[12px] font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {bulkBusy ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+              {bulkBusy ? "Working..." : `Accept selected (${selectedAppointments.length})`}
+            </Button>
+            <Button
+              type="button"
+              disabled={bulkBusy}
+              onClick={() => {
+                setBulkFeedback(null)
+                setBulkDeclineTargets(selectedAppointments)
+              }}
+              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-rose-200 bg-white px-3 text-[12px] font-semibold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <X size={14} />
+              Decline selected
+            </Button>
+            <button
+              type="button"
+              onClick={clearSelection}
+              className="rounded text-[12px] font-semibold text-muted underline-offset-2 transition hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+            >
+              Clear selection
+            </button>
+          </div>
         </div>
       ) : null}
 
@@ -958,7 +1219,7 @@ export function FacultyAppointmentsView({
           <button
             type="button"
             onClick={() => { void loadAppointments() }}
-            className="inline-flex items-center gap-1.5 font-semibold underline"
+            className="inline-flex items-center gap-1.5 rounded font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
           >
             <RotateCcw size={13} /> Retry
           </button>
@@ -969,25 +1230,61 @@ export function FacultyAppointmentsView({
           {notice}
         </div>
       ) : null}
+      {bulkFeedback ? (
+        <div
+          role={bulkFeedback.tone === "error" ? "alert" : "status"}
+          className={`mt-3 rounded-[10px] border px-3 py-2 text-[13px] font-medium ${
+            bulkFeedback.tone === "error"
+              ? "border-rose-200 bg-rose-50 text-rose-700"
+              : "border-green/20 bg-green-tint text-green"
+          }`}
+        >
+          {bulkFeedback.message}
+        </div>
+      ) : null}
+      <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted">
+        <span className="font-semibold text-ink">Keyboard</span>
+        <span><ShortcutKey>J</ShortcutKey> next</span>
+        <span><ShortcutKey>K</ShortcutKey> previous</span>
+        <span><ShortcutKey>A</ShortcutKey> accept</span>
+        <span><ShortcutKey>D</ShortcutKey> decline</span>
+        <span className="text-muted">A/D use the selected request or the first pending request.</span>
+      </div>
 
       <div className="mt-4 flex min-h-0 flex-1 gap-4">
         <div
           ref={pageFocusRef}
+          data-dialog-focus-fallback=""
           tabIndex={-1}
-          className="flex min-h-0 min-w-0 flex-1 flex-col outline-none"
+          className="flex min-h-0 min-w-0 flex-1 flex-col outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
         >
           <section className="flex min-h-[420px] flex-1 flex-col overflow-hidden rounded-[16px] border border-border-card bg-white shadow-[0_1px_2px_rgba(45,27,105,0.06)]">
             <div className="min-h-0 flex-1 overflow-auto">
-              <table className="w-full min-w-[780px] table-fixed border-collapse text-left">
+              <table className="w-full min-w-[940px] table-fixed border-collapse text-left">
                 <colgroup>
-                  <col className="w-[26%]" />
-                  <col className="w-[28%]" />
-                  <col className="w-[18%]" />
-                  <col className="w-[18%]" />
+                  <col className="w-[40px]" />
+                  <col className="w-[23%]" />
+                  <col className="w-[23%]" />
+                  <col className="w-[19%]" />
+                  <col className="w-[21%]" />
                   <col className="w-[132px]" />
                 </colgroup>
                 <thead className="sticky top-0 z-10 bg-[#FBFAFF]">
                   <tr className="border-b border-border-card">
+                    <th scope="col" className="h-11 pl-4 pr-2">
+                      {canBulkManage ? (
+                        <input
+                          ref={selectAllRef}
+                          type="checkbox"
+                          checked={allEligibleSelected}
+                          disabled={bulkEligibleRows.length === 0}
+                          onChange={toggleAllEligible}
+                          aria-label={`Select all ${bulkEligibleRows.length} actionable appointments in this filtered view`}
+                          title="Select all actionable appointments in this filtered view"
+                          className="size-4 cursor-pointer rounded border-border text-primary focus:ring-primary disabled:cursor-not-allowed disabled:opacity-40"
+                        />
+                      ) : null}
+                    </th>
                     <th scope="col" className="h-11 px-4 text-[12px] font-bold uppercase tracking-[0.05em] text-muted">Student</th>
                     <th scope="col" className="h-11 px-4 text-[12px] font-bold uppercase tracking-[0.05em] text-muted">Consultation</th>
                     <th scope="col" className="h-11 px-4 text-[12px] font-bold uppercase tracking-[0.05em] text-muted">Schedule</th>
@@ -998,7 +1295,7 @@ export function FacultyAppointmentsView({
                 <tbody>
                   {loading ? Array.from({ length: 6 }).map((_, index) => (
                     <tr key={`skeleton-${index}`} className={density === "comfortable" ? "h-16" : "h-[52px]"}>
-                      <td colSpan={5} className="border-b border-divider px-4">
+                      <td colSpan={6} className="border-b border-divider px-4">
                         <div className="flex animate-pulse items-center gap-3">
                           <div className="size-9 rounded-full bg-soft" />
                           <div className="flex-1">
@@ -1011,7 +1308,7 @@ export function FacultyAppointmentsView({
                     </tr>
                   )) : pageRows.length === 0 ? (
                     <tr>
-                      <td colSpan={5}>
+                      <td colSpan={6}>
                         <div className="flex min-h-[260px] flex-col items-center justify-center px-6 py-10 text-center">
                           <span className="flex size-11 items-center justify-center rounded-full bg-soft text-primary">
                             <CalendarClock size={20} />
@@ -1041,6 +1338,7 @@ export function FacultyAppointmentsView({
                     const meta = studentMeta(appointment)
                     const rowHeight = density === "comfortable" ? "h-16" : "h-[52px]"
                     const isSelected = selectedId === appointment.id
+                    const selectable = canBulkAct("accept", appointment)
                     return (
                       <tr
                         key={appointment.id}
@@ -1057,6 +1355,25 @@ export function FacultyAppointmentsView({
                           isSelected ? "bg-soft/80" : "hover:bg-soft/40"
                         }`}
                       >
+                        <td
+                          className="pl-4 pr-2 align-middle"
+                          onClick={(event) => event.stopPropagation()}
+                          onKeyDown={(event) => event.stopPropagation()}
+                        >
+                          {canBulkManage ? (
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.has(appointment.id)}
+                              disabled={!selectable}
+                              onChange={() => toggleSelection(appointment)}
+                              aria-label={`Select ${name}${selectable ? "" : " (not actionable)"}`}
+                              title={selectable
+                                ? `Select ${name}`
+                                : "Final-state appointments cannot be changed"}
+                              className="size-4 cursor-pointer rounded border-border text-primary focus:ring-primary disabled:cursor-not-allowed disabled:opacity-40"
+                            />
+                          ) : null}
+                        </td>
                         <td className="px-4 align-middle">
                           <div className="flex min-w-0 items-center gap-3">
                             <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-soft text-[12px] font-bold text-primary">
@@ -1115,7 +1432,7 @@ export function FacultyAppointmentsView({
                   aria-label="Previous page"
                   disabled={currentPage <= 1}
                   onClick={() => setPage(currentPage - 1)}
-                  className="flex size-8 items-center justify-center rounded-full border border-border-card bg-white text-muted transition hover:border-primary/30 hover:bg-soft hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                  className="flex size-8 items-center justify-center rounded-full border border-border-card bg-white text-muted transition hover:border-primary/30 hover:bg-soft hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <ChevronLeft size={16} />
                 </button>
@@ -1124,7 +1441,7 @@ export function FacultyAppointmentsView({
                   aria-label="Next page"
                   disabled={currentPage >= totalPages}
                   onClick={() => setPage(currentPage + 1)}
-                  className="flex size-8 items-center justify-center rounded-full border border-border-card bg-white text-muted transition hover:border-primary/30 hover:bg-soft hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                  className="flex size-8 items-center justify-center rounded-full border border-border-card bg-white text-muted transition hover:border-primary/30 hover:bg-soft hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <ChevronRight size={16} />
                 </button>
@@ -1138,20 +1455,18 @@ export function FacultyAppointmentsView({
             appointment={selectedAppointment}
             position={selectedIndex + 1}
             total={filtered.length}
-            busy={busyId === selectedAppointment.id}
             onPrevious={() => selectByIndex(selectedIndex - 1)}
             onNext={() => selectByIndex(selectedIndex + 1)}
             onClose={closePanel}
-            onAccept={() => { void approve(selectedAppointment) }}
-            onDecline={() => openReasonDialog(
-              selectedAppointment,
-              selectedAppointment.status === "reschedule_requested" ? "reject" : "decline",
-            )}
+            onAccept={() => setDialog({ kind: "accept", appointment: selectedAppointment })}
+            onDecline={() => setDialog({ kind: "decline", appointment: selectedAppointment })}
             onOpenRecords={onOpenRecords}
-            onReschedule={() => openSchedule(selectedAppointment)}
-            onCancel={() => openReasonDialog(selectedAppointment, "cancel")}
-            onComplete={() => { void complete(selectedAppointment) }}
-            onMarkNoShow={() => { void markNoShow(selectedAppointment) }}
+            onReschedule={() => setDialog({ kind: "reschedule", appointment: selectedAppointment })}
+            onCancel={() => setDialog({ kind: "cancel", appointment: selectedAppointment })}
+            onComplete={() => setDialog({ kind: "confirm", appointment: selectedAppointment, action: "complete" })}
+            onMarkNoShow={() => setDialog({ kind: "confirm", appointment: selectedAppointment, action: "no-show" })}
+            conflict={panelConflict}
+            timeZone={timeZone}
           />
         ) : null}
       </div>
@@ -1161,22 +1476,46 @@ export function FacultyAppointmentsView({
         <>
           <div className="fixed inset-0 z-[55]" onMouseDown={() => setMenu(null)} />
           <div
+            ref={menuItemsRef}
             role="menu"
             aria-label={`Actions for ${studentName(menu.appointment)}`}
             style={{ top: menu.top, left: menu.left }}
             className="fixed z-[56] w-52 overflow-hidden rounded-[12px] border border-border-card bg-white p-1.5 shadow-[0_16px_40px_rgba(45,27,105,0.18)]"
             onMouseDown={(event) => event.stopPropagation()}
+            onKeyDown={(event) => {
+              const items = Array.from(
+                menuItemsRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [],
+              )
+              const currentIndex = items.findIndex((item) => item === document.activeElement)
+              let nextIndex = currentIndex
+              if (event.key === "ArrowDown") nextIndex = (currentIndex + 1) % items.length
+              else if (event.key === "ArrowUp") nextIndex = (currentIndex - 1 + items.length) % items.length
+              else if (event.key === "Home") nextIndex = 0
+              else if (event.key === "End") nextIndex = items.length - 1
+              else if (event.key === "Escape") {
+                event.preventDefault()
+                event.stopPropagation()
+                setMenu(null)
+                window.requestAnimationFrame(() => menuTriggerRef.current?.focus())
+                return
+              } else {
+                return
+              }
+              event.preventDefault()
+              items[nextIndex]?.focus()
+            }}
           >
-            {menuItemsFor(menu.appointment).map((item) => (
+            {menuItemsFor(menu.appointment).map((item, index) => (
               <button
                 key={item.label}
                 type="button"
                 role="menuitem"
+                tabIndex={index === 0 ? 0 : -1}
                 onClick={() => {
                   setMenu(null)
                   item.run()
                 }}
-                className={`flex w-full items-center gap-2 rounded-[8px] px-2.5 py-2 text-left text-[13px] font-medium transition hover:bg-soft ${
+                className={`flex w-full items-center gap-2 rounded-[8px] px-2.5 py-2 text-left text-[13px] font-medium transition hover:bg-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] ${
                   item.danger ? "text-rose-700 hover:bg-rose-50" : "text-ink"
                 }`}
               >
@@ -1189,81 +1528,82 @@ export function FacultyAppointmentsView({
         document.body,
       ) : null}
 
-      {reasonAction ? (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-[rgba(45,27,105,0.30)] p-4 backdrop-blur-[6px]"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setReasonAction(null)
+      {bulkDeclineTargets ? (
+        <BulkDeclineAppointmentsDialog
+          appointments={bulkDeclineTargets}
+          onClose={() => setBulkDeclineTargets(null)}
+          onConfirm={runBulkDecline}
+          onCompleted={(outcome) => applyBulkOutcome("decline", outcome)}
+        />
+      ) : null}
+
+      {dialog?.kind === "accept" ? (
+        <AcceptAppointmentDialog
+          appointment={dialog.appointment}
+          onClose={() => setDialog(null)}
+          onUpdated={(updated) => {
+            updateRow(updated)
+            setNotice(`Appointment approved for ${studentName(updated)}.`)
           }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="appointment-reason-title"
-            className="w-full max-w-[440px] rounded-[16px] border border-border-card bg-white p-6 shadow-[0_20px_60px_rgba(45,27,105,0.18)]"
-          >
-            <form onSubmit={submitReason}>
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h2 id="appointment-reason-title" className="font-[var(--font-display)] text-[20px] font-semibold text-ink">
-                    {reasonTitle}
-                  </h2>
-                  <p className="mt-1 text-[13px] text-muted">{reasonDescription}</p>
-                </div>
-                <button
-                  type="button"
-                  aria-label="Close dialog"
-                  onClick={() => setReasonAction(null)}
-                  className="flex size-8 shrink-0 items-center justify-center rounded-full bg-soft text-ink transition hover:opacity-80"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-              <label className="mt-4 block">
-                <span className="text-[13px] font-semibold text-ink">Reason &middot; Required</span>
-                <TextareaTag
-                  ref={reasonRef}
-                  rows={4}
-                  maxLength={5000}
-                  value={reason}
-                  aria-invalid={Boolean(reasonError)}
-                  aria-describedby={reasonError ? "appointment-reason-error" : undefined}
-                  onChange={(event) => {
-                    setReason(event.target.value)
-                    setReasonError("")
-                  }}
-                  placeholder="Share a short reason with the student"
-                  className="mt-2 w-full resize-none rounded-[12px] border border-border bg-white px-3 py-2 text-[13px] text-ink outline-none transition placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-primary/15"
-                />
-              </label>
-              {reasonError ? (
-                <p id="appointment-reason-error" role="alert" className="mt-2 flex items-center gap-1.5 text-[12px] font-medium text-rose-700">
-                  <AlertCircle size={14} /> {reasonError}
-                </p>
-              ) : null}
-              <div className="mt-4 flex justify-end gap-2">
-                <Button
-                  type="button"
-                  onClick={() => setReasonAction(null)}
-                  className="h-10 rounded-full border border-primary bg-white px-4 text-[13px] font-semibold text-primary hover:bg-soft"
-                >
-                  Keep appointment
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={busyId === reasonAction.appointment.id}
-                  className={`h-10 rounded-full px-4 text-[13px] font-semibold text-white disabled:opacity-60 ${
-                    reasonAction.kind === "cancel" ? "bg-rose-600 hover:bg-rose-700" : "bg-primary hover:opacity-90"
-                  }`}
-                >
-                  {busyId === reasonAction.appointment.id ? "Saving..." : reasonTitle}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
+        />
+      ) : null}
+
+      {dialog?.kind === "decline" ? (
+        <DeclineAppointmentDialog
+          appointment={dialog.appointment}
+          onClose={() => setDialog(null)}
+          onUpdated={(updated) => {
+            updateRow(updated)
+            setNotice(`Request declined for ${studentName(updated)}.`)
+          }}
+        />
+      ) : null}
+
+      {dialog?.kind === "cancel" ? (
+        <CancelAppointmentDialog
+          appointment={dialog.appointment}
+          onClose={() => setDialog(null)}
+          onUpdated={(updated) => {
+            updateRow(updated)
+            setNotice(`Appointment cancelled for ${studentName(updated)}.`)
+          }}
+        />
+      ) : null}
+
+      {dialog?.kind === "confirm" ? (
+        <ConfirmAppointmentDialog
+          appointment={dialog.appointment}
+          action={dialog.action}
+          onClose={() => setDialog(null)}
+          onUpdated={(updated) => {
+            updateRow(updated)
+            setNotice(dialog.action === "complete"
+              ? `Consultation completed for ${studentName(updated)}.`
+              : `No-show recorded for ${studentName(updated)}.`)
+          }}
+        />
+      ) : null}
+
+      {dialog?.kind === "reschedule" ? (
+        <ChooseNewTimeDialog
+          appointment={dialog.appointment}
+          appointments={rows}
+          onClose={() => setDialog(null)}
+          onUpdated={(updated) => {
+            updateRow(updated)
+            setNotice(`Appointment moved for ${studentName(updated)}.`)
+          }}
+        />
       ) : null}
     </div>
+  )
+}
+
+function ShortcutKey({ children }: { children: ReactNode }) {
+  return (
+    <kbd className="inline-flex h-5 min-w-5 items-center justify-center rounded-[5px] border border-border-card bg-white px-1 text-[12px] font-bold text-ink shadow-[0_1px_0_rgba(45,27,105,0.08)]">
+      {children}
+    </kbd>
   )
 }
 
@@ -1282,4 +1622,3 @@ function FilterChip({ label, onClear }: { label: string; onClear: () => void }) 
     </span>
   )
 }
-

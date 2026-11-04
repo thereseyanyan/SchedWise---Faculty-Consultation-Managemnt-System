@@ -61,6 +61,9 @@ try {
         'UPDATE appointments SET
          status = :status,
          approved_at = NOW(),
+         reschedule_from_date = NULL,
+         reschedule_from_start_minutes = NULL,
+         reschedule_from_end_minutes = NULL,
          updated_at = NOW()
          WHERE id = :id'
     );

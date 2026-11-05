@@ -35,7 +35,7 @@ export function AdminPortal({ onSignOut, onOpenAccount }: { onSignOut: () => voi
   const open = (label: string) => { setView(label); setDrilldown(null) }
   return <div className="sched-admin">
     <aside className="sched-admin__sidebar">
-      <div className="sched-admin__brand"><img src="/logoo.png" alt="SchedWise" className="sched-admin__brand-logo" /><span className="sched-admin__mark">◌</span></div>
+      <div className="sched-admin__brand"><div className="sched-admin__brand-name"><span><span>Sched</span><span>Wise</span></span><img src="/logoo.png" alt="SchedWise mark" className="sched-admin__brand-icon" /></div></div>
       <nav className="sched-admin__nav" aria-label="Admin navigation">
         {nav.map(({ label, icon: Icon, badge }) => <button key={label} className={view === label && !drilldown ? "is-active" : ""} onClick={() => open(label)}><Icon size={18}/><span>{label}</span>{badge ? <b>{badge}</b> : null}</button>)}
       </nav>

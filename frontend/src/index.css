@@ -159,3 +159,148 @@ body {
     animation: none;
   }
 }
+
+#calendar-schedule-print-document {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: auto;
+    margin: 12mm;
+  }
+
+  html,
+  body {
+    min-width: 0 !important;
+    min-height: 0 !important;
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  dialog,
+  dialog::backdrop {
+    display: none !important;
+  }
+
+  #calendar-schedule-print-document,
+  #calendar-schedule-print-document * {
+    visibility: visible !important;
+  }
+
+  #calendar-schedule-print-document {
+    position: absolute !important;
+    inset: 0 auto auto 0 !important;
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+    color: #111 !important;
+    font: 9pt/1.35 Arial, sans-serif !important;
+  }
+
+  #calendar-schedule-print-document .calendar-print-header {
+    margin-bottom: 7mm;
+    border-bottom: 1px solid #555;
+    padding-bottom: 4mm;
+  }
+
+  #calendar-schedule-print-document .calendar-print-brand {
+    margin: 0 0 1mm;
+    font-size: 15pt;
+    font-weight: 700;
+  }
+
+  #calendar-schedule-print-document .calendar-print-demo {
+    float: right;
+    margin: 0;
+    border: 1px solid #555;
+    padding: 1mm 2mm;
+    font-size: 8pt;
+    font-weight: 700;
+  }
+
+  #calendar-schedule-print-document h1 {
+    margin: 0 0 3mm;
+    font-size: 17pt;
+  }
+
+  #calendar-schedule-print-document .calendar-print-header > p:not(.calendar-print-brand, .calendar-print-demo) {
+    margin: 1mm 0;
+  }
+
+  #calendar-schedule-print-document .calendar-print-day {
+    margin: 0 0 5mm;
+    overflow: visible !important;
+  }
+
+  #calendar-schedule-print-document .calendar-print-day h2 {
+    margin: 0 0 2mm;
+    break-after: avoid-page;
+    page-break-after: avoid;
+    font-size: 12pt;
+  }
+
+  #calendar-schedule-print-document .calendar-print-day table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-size: 8.5pt;
+    break-inside: auto;
+  }
+
+  #calendar-schedule-print-document .calendar-print-day thead {
+    display: table-header-group;
+  }
+
+  #calendar-schedule-print-document .calendar-print-day th,
+  #calendar-schedule-print-document .calendar-print-day td {
+    border: 1px solid #777;
+    padding: 2mm;
+    text-align: left;
+    vertical-align: top;
+    overflow-wrap: anywhere;
+  }
+
+  #calendar-schedule-print-document .calendar-print-day th:nth-child(1),
+  #calendar-schedule-print-document .calendar-print-day td:nth-child(1) {
+    width: 18%;
+  }
+
+  #calendar-schedule-print-document .calendar-print-day th:nth-child(2),
+  #calendar-schedule-print-document .calendar-print-day td:nth-child(2) {
+    width: 38%;
+  }
+
+  #calendar-schedule-print-document .calendar-print-day th:nth-child(3),
+  #calendar-schedule-print-document .calendar-print-day td:nth-child(3) {
+    width: 22%;
+  }
+
+  #calendar-schedule-print-document .calendar-print-day th:nth-child(4),
+  #calendar-schedule-print-document .calendar-print-day td:nth-child(4) {
+    width: 22%;
+  }
+
+  #calendar-schedule-print-document .calendar-print-time {
+    white-space: nowrap;
+  }
+
+  #calendar-schedule-print-document .calendar-print-day tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  #calendar-schedule-print-document .calendar-print-empty {
+    margin: 0;
+    break-inside: avoid;
+  }
+}

@@ -18,6 +18,7 @@ import {
   mergeAppointment,
   pillField,
   pillLabel,
+  relativeTime,
   toIso,
   toUiAppointment,
 } from "../../shared"
@@ -91,7 +92,7 @@ type IncomingRequest = {
   reason: string
   note: string
   timeLabel: string
-  timeIso: string
+  requestedAt: string
   initials: string
   status: string
   room?: string
@@ -161,7 +162,7 @@ export function FacultyTodayView({
           reason: appt.reason || "No reason provided.",
           note: appt.status === "reschedule_requested" ? appt.reschedule_reason ?? "" : "",
           timeLabel: `${formatDateLabel(appt.appointment_date)} · ${formatTime(appt.start_minutes)}`,
-          timeIso: appt.appointment_date,
+          requestedAt: appt.requested_at,
           initials: getInitials(studentName(appt)),
           status: appt.status,
           room: appt.location || undefined,
@@ -310,7 +311,7 @@ export function FacultyTodayView({
                         {request.student_name} · {request.status === "reschedule_requested" ? "Reschedule requested" : "Pending approval"}
                       </p>
                       <p title={request.topic || request.reason} className="mt-1 line-clamp-2 break-words text-sm text-muted">{request.topic || request.reason}</p>
-                      <p className="mt-1 text-[13px] text-muted">
+                      <p className="mt-1 break-words text-[13px] text-muted">
                         {request.timeLabel}
                         {request.room ? ` · Room ${request.room}` : ""}
                       </p>
@@ -321,8 +322,12 @@ export function FacultyTodayView({
                       ) : null}
                     </div>
                   </div>
-                  <div className="mt-3 flex flex-col gap-2">
-                    <div className="flex gap-3">
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-x-2 gap-y-2">
+                    <div
+                      role="group"
+                      aria-label={`Actions for ${request.student_name}'s request`}
+                      className="flex shrink-0 flex-nowrap items-center gap-1.5"
+                    >
                       <Button
                         disabled={actingId === request.id}
                         onClick={async () => {
@@ -343,18 +348,32 @@ export function FacultyTodayView({
                             setActingId("")
                           }
                         }}
-                        className="h-10 flex-1 rounded-full bg-primary text-sm font-semibold text-white"
+                        className="h-9 shrink-0 whitespace-nowrap rounded-[8px] bg-primary px-2.5 text-[12px] font-semibold text-white"
                       >
                         {actingId === request.id ? "Saving…" : request.status === "reschedule_requested" ? "Approve New Time" : "Accept"}
                       </Button>
                       <Button
                         disabled={actingId === request.id}
                         onClick={() => openDecline(request)}
-                        className="h-10 flex-1 rounded-full border border-primary bg-white text-sm font-semibold text-primary"
+                        className="h-9 shrink-0 whitespace-nowrap rounded-[8px] border border-primary bg-white px-2.5 text-[12px] font-semibold text-primary"
                       >
                         Decline
                       </Button>
+                      <Button
+                        disabled={actingId === request.id}
+                        onClick={() => setSelectedAppointmentId(request.id)}
+                        aria-label={`View details for ${request.student_name}'s request`}
+                        className="h-9 shrink-0 whitespace-nowrap rounded-[8px] border border-border-card bg-white px-2.5 text-[12px] font-semibold text-ink hover:bg-soft"
+                      >
+                        View details
+                      </Button>
                     </div>
+                    <span
+                      className="ml-auto min-w-[112px] shrink-0 whitespace-nowrap text-right text-[12px] text-muted"
+                      title={request.requestedAt}
+                    >
+                      {relativeTime(request.requestedAt)}
+                    </span>
                   </div>
                 </div>
               ))

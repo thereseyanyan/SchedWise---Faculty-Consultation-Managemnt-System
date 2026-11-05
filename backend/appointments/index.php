@@ -72,10 +72,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                 uf.first_name AS faculty_first_name, uf.last_name AS faculty_last_name,
                 uf.faculty_number AS faculty_number,
                 us.first_name AS student_first_name, us.last_name AS student_last_name,
-                us.student_number AS student_number, us.program AS student_program
+                us.student_number AS student_number, us.program AS student_program,
+                us.department_id AS student_department_id,
+                d.name AS student_department_name
          FROM appointments a
          LEFT JOIN user_profiles uf ON a.faculty_id = uf.user_id
          LEFT JOIN user_profiles us ON a.student_id = us.user_id
+         LEFT JOIN departments d ON us.department_id = d.id
          LEFT JOIN consultation_records cr ON cr.appointment_id = a.id
          {$whereClause}
          ORDER BY a.appointment_date, a.start_minutes"

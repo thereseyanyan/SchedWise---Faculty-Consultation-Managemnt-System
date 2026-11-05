@@ -1300,3 +1300,8 @@ Private notes are protected by application authorization, not field encryption; 
 - Preserved the ignored local `backend/config.php`, `frontend/.env`, `.runtime/` data, and existing MySQL records. The setup migration only added `users.deleted_at`, permanent unique profile IDs, and account-ID sequences; it did not reset passwords or delete accounts, appointments, or audit history.
 - Updated the README's current email/config statements to match the restored local Mailpit setup. Real SMTP is optional through `SCHEDWISE_MAIL_*`, not required for local use.
 - Last verified 2026-10-21: PHP lint, TypeScript check, production build, 12/12 API tests at that stage, 4/4 client CSRF tests, launcher stop/start, Mailpit fixture, and a Brave role-routing plus confirmation-dialog smoke check all passed. Browser automation and multi-worker concurrency coverage were still pending at that stage.
+
+
+## Known limitation: Accepting requests backend synchronization
+
+The Accepting requests toggle currently changes local UI state only; it is not connected to an authenticated faculty preference endpoint. Backend integration still needs to load and save this preference on the authenticated faculty account. The booking API must enforce the preference server-side because a frontend toggle alone cannot prevent requests. A failed save must show an error and restore the last confirmed state. A saved setting must remain consistent after reload and across sessions.

@@ -1,45 +1,24 @@
-import { useEffect, useState } from "react"
+import { useContext, useEffect, useState } from "react"
 import { createPortal } from "react-dom"
 import { Bell, CheckCheck, X } from "lucide-react"
-import { notificationsApi, type AppNotification } from "../api"
-import { formatDate } from "./datetime"
-import { errorMessage } from "./utils"
+import type { AppNotification } from "../api"
+import { CurrentUserContext } from "./contexts"
+import { dateTimeInTimeZone } from "./datetime"
+import {
+  markAllNotificationsRead,
+  markNotificationRead,
+  refreshNotifications,
+  useNotifications,
+} from "./notificationsStore"
 
 export function NotificationsButton() {
+  const currentUser = useContext(CurrentUserContext)
+  const userId = currentUser?.id ?? ""
+  const notifications = useNotifications(userId)
   const [open, setOpen] = useState(false)
-  const [items, setItems] = useState<AppNotification[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState("")
-  const [notice, setNotice] = useState("")
-  const [actingId, setActingId] = useState("")
-  const [markingAll, setMarkingAll] = useState(false)
-
-  const unread = items.filter((item) => !item.read_at).length
-
-  const load = async (quiet = false) => {
-    if (!quiet) setLoading(true)
-    if (!quiet) setError("")
-    try {
-      setItems(await notificationsApi.list())
-    } catch (err) {
-      if (!quiet) setError(errorMessage(err, "Unable to load notifications."))
-    } finally {
-      if (!quiet) setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    void load(true)
-    const onFocus = () => { void load(true) }
-    const timer = window.setInterval(() => { void load(true) }, 60_000)
-    window.addEventListener("focus", onFocus)
-    return () => {
-      window.removeEventListener("focus", onFocus)
-      window.clearInterval(timer)
-    }
-    // Load once on mount; the poll/focus listener keeps the unread count fresh.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  const items = notifications.items
+  const unread = notifications.unreadCount ?? 0
+  const error = notifications.loadError || notifications.actionError
 
   useEffect(() => {
     if (!open) return
@@ -52,43 +31,12 @@ export function NotificationsButton() {
 
   const openPanel = () => {
     setOpen(true)
-    setNotice("")
-    void load()
+    void refreshNotifications(userId, true)
   }
 
-  const markAllRead = async () => {
-    setMarkingAll(true)
-    setError("")
-    setNotice("")
-    try {
-      await notificationsApi.markAllRead()
-      const now = new Date().toISOString()
-      setItems((current) => current.map((item) => item.read_at ? item : { ...item, read_at: now }))
-      setNotice("All notifications marked as read.")
-    } catch (err) {
-      setError(errorMessage(err, "Unable to mark notifications as read."))
-    } finally {
-      setMarkingAll(false)
-    }
-  }
-
-  const markRead = async (notification: AppNotification) => {
-    if (notification.read_at) return
-    setActingId(notification.id)
-    setError("")
-    setNotice("")
-    try {
-      await notificationsApi.markRead(notification.id)
-      const now = new Date().toISOString()
-      setItems((current) =>
-        current.map((item) => item.id === notification.id ? { ...item, read_at: now } : item),
-      )
-    } catch (err) {
-      setError(errorMessage(err, "Unable to mark this notification as read."))
-    } finally {
-      setActingId("")
-    }
-  }
+  const markAllRead = () => void markAllNotificationsRead(userId)
+  const markRead = (notification: AppNotification) =>
+    void markNotificationRead(userId, notification)
 
   return (
     <>
@@ -143,9 +91,9 @@ export function NotificationsButton() {
             </div>
 
             <div className="px-6 py-5">
-              {notice && (
+              {notifications.notice && (
                 <p role="status" className="mb-4 rounded-xl bg-emerald-50 px-4 py-3 text-xs font-medium text-emerald-700">
-                  {notice}
+                  {notifications.notice}
                 </p>
               )}
               {error && (
@@ -153,7 +101,7 @@ export function NotificationsButton() {
                   <p>{error}</p>
                   <button
                     type="button"
-                    onClick={() => { void load() }}
+                    onClick={() => { void refreshNotifications(userId, true) }}
                     className="rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-[11px] font-semibold text-rose-700 hover:bg-rose-100"
                   >
                     Retry
@@ -161,7 +109,7 @@ export function NotificationsButton() {
                 </div>
               )}
 
-              {loading ? (
+              {notifications.loading && !notifications.loaded ? (
                 <p className="py-6 text-center text-sm text-slate-500">Loading notifications…</p>
               ) : items.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-6 py-10 text-center">
@@ -195,22 +143,31 @@ export function NotificationsButton() {
                           <p className="text-sm font-semibold text-slate-900">{item.title}</p>
                           <p className="mt-1 text-xs leading-5 text-slate-600">{item.message}</p>
                           <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                            <p className="text-[11px] text-slate-400">
-                              {formatDate(new Date(item.created_at.replace(" ", "T")), {
-                                month: "short",
-                                day: "numeric",
-                                hour: "numeric",
-                                minute: "2-digit",
-                              })}
+                            <p className="text-[12px] text-slate-500">
+                              {(() => {
+                                const createdAt = dateTimeInTimeZone(
+                                  item.created_at,
+                                  currentUser?.timezone,
+                                )
+                                return createdAt
+                                  ? new Intl.DateTimeFormat("en-US", {
+                                      month: "short",
+                                      day: "numeric",
+                                      hour: "numeric",
+                                      minute: "2-digit",
+                                      timeZone: currentUser?.timezone,
+                                    }).format(createdAt)
+                                  : "Time unavailable"
+                              })()}
                             </p>
                             {!item.read_at && (
                               <button
                                 type="button"
-                                disabled={actingId === item.id}
+                                disabled={notifications.busyId === item.id || notifications.markingAll}
                                 onClick={() => { void markRead(item) }}
                                 className="rounded-lg border border-purple-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-purple-700 hover:bg-purple-50 disabled:opacity-60"
                               >
-                                {actingId === item.id ? "Saving…" : "Mark as read"}
+                                {notifications.busyId === item.id ? "Saving…" : "Mark as read"}
                               </button>
                             )}
                           </div>
@@ -225,12 +182,12 @@ export function NotificationsButton() {
             <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-6 py-4">
               <button
                 type="button"
-                disabled={unread === 0 || markingAll}
-                onClick={() => { void markAllRead() }}
+                disabled={unread === 0 || notifications.markingAll || notifications.busyId !== ""}
+                onClick={markAllRead}
                 className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <CheckCheck size={14} />
-                {markingAll ? "Saving…" : "Mark all read"}
+                {notifications.markingAll ? "Saving…" : "Mark all read"}
               </button>
               <button
                 type="button"

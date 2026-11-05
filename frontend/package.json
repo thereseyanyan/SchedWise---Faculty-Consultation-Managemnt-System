@@ -11,7 +11,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test:browser": "node --test tests/browser-smoke.test.mjs",
-    "test:state": "node --test tests/appointment-state.test.mjs tests/appointment-dialog-state.test.mjs tests/appointment-bulk-state.test.mjs"
+    "test:state": "node --test tests/appointment-state.test.mjs tests/appointment-dialog-state.test.mjs tests/appointment-bulk-state.test.mjs tests/calendar-demo-state.test.mjs"
   },
   "dependencies": {
     "@fontsource/baloo-2": "^5.1.0",

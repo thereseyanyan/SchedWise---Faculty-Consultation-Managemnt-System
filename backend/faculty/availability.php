@@ -90,9 +90,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         // Apply explicit filters if provided (and user has permission)
         if ($facultyId && ($user['role_id'] === 'admin' ||
                            ($user['role_id'] === 'faculty' && $facultyId == $user['id']) ||
-                           ($user['role_id'] === 'student' &&
-                            // Students can check specific faculty's availability
-                            true))) {
+                           // Students can check a specific faculty's availability.
+                           $user['role_id'] === 'student')) {
             $whereConditions[] = 'fa.faculty_id = :filter_faculty_id';
             $params[':filter_faculty_id'] = $facultyId;
 

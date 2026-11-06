@@ -4,7 +4,17 @@ require_once __DIR__ . '/../bootstrap.php';
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') respond(['error' => 'Method not allowed.'], 405);
 authenticateUser();
 global $pdo;
-$faculty = $pdo->query("SELECT id FROM users WHERE role_id = 'faculty' AND status = 'active'")->fetchAll();
+$facultyStatement = $pdo->prepare(
+    "SELECT id FROM users
+     WHERE role_id = 'faculty'
+       AND status = 'active'
+       AND faculty_approval_status IN (:approved_status, :not_required_status)"
+);
+$facultyStatement->execute([
+    ':approved_status' => 'approved',
+    ':not_required_status' => 'not_required',
+]);
+$faculty = $facultyStatement->fetchAll();
 $result = [];
 // Use the database clock, matching appointment validation.
 $now = $pdo->query('SELECT CURRENT_DATE() AS today, HOUR(CURRENT_TIME()) * 60 + MINUTE(CURRENT_TIME()) AS minutes')->fetch();

@@ -129,9 +129,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             respond(['error' => 'You already have an appointment at this time.'], 409);
         }
 
-        // Check if faculty exists and is active
-        $facultyStmt = $pdo->prepare("SELECT id, status FROM users WHERE id = :id AND role_id = 'faculty' FOR UPDATE");
-        $facultyStmt->execute([':id' => $input['faculty_id']]);
+        // Check if faculty exists and is active, and has not been left pending
+        // or rejected by the administrator approval workflow.
+        $facultyStmt = $pdo->prepare(
+            "SELECT id, status FROM users
+             WHERE id = :id AND role_id = 'faculty'
+               AND faculty_approval_status IN (:approved_status, :not_required_status)
+             FOR UPDATE"
+        );
+        $facultyStmt->execute([
+            ':id' => $input['faculty_id'],
+            ':approved_status' => 'approved',
+            ':not_required_status' => 'not_required',
+        ]);
         $faculty = $facultyStmt->fetch();
 
         if (!$faculty) {

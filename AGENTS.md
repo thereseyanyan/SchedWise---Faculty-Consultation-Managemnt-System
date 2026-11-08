@@ -20,4 +20,16 @@ These rules apply to every implementation request in this project, including the
 
 9. **Report the outcome.** After each task, summarize features added, existing areas modified and why, checks performed and actual results, and remaining limitations or integration blockers. Do not claim "nothing was affected" without supporting evidence.
 
-10. **Keep these rules active.** Follow these rules throughout this conversation and all subsequent project stages. If persistent project instructions are supported, save them in the appropriate instructions document without overwriting existing guidance and report where they were saved. If persistence is unavailable, say so and note that the rules may need to be provided again in a new session.
+10. **Keep these rules active.** Follow these rules throughout this conversation and all subsequent project stages. These rules are saved in the repository root AGENTS.md. Do not create or edit other instruction files.
+
+
+## SchedWise-specific rules
+
+11. **Faculty scope only.** Do not change Student or Admin UI or behavior. If a shared file (for example frontend/src/shared/ui.tsx or index.css) must change, make it opt-in (a new prop, variant or scoped class) so Student and Admin render exactly as before. Do not edit frontend/src/features/student or frontend/src/features/admin.
+12. **Backend is off limits unless the prompt names the files.** Do not edit backend/ or tools/ for UI tasks. Approved exception already in place: the read-only GET /appointments/index.php?id= endpoint. Do not add database changes or dependencies without approval.
+13. **Never run tests that can send email or create accounts.** Do not run tools/run-tests.ps1, npm run test:browser, or the full API suite; the local SMTP configuration may be real. Allowed: `npx tsc --noEmit`, `npm run build`, `php -l`, `node --test tests/audit-transaction.test.mjs tests/csrf-client.test.mjs`, and pure unit tests that need no database or email.
+14. **Secrets.** Never print or quote anything from backend/config.php, frontend/.env or environment variables.
+15. **File hygiene.** Edit existing files in place. Do not create, rename, move or delete files unless the prompt says so. No scratch files (*_temp.txt, test.txt, tscerr.txt, tscout.txt, *.new.tsx); use the system temp folder for temporary output.
+16. **Git.** Do not commit, push, or use `git add -A`. Show `git status` and `git diff --stat` at the end.
+17. **Scope of reading.** Read only the files named in the prompt and what they import. Do not spawn subagents or run repo-wide sweeps.
+18. **Design.** Use the tokens in frontend/src/index.css (no hard-coded hex). Spacing 4/8/12/16/20/24/32/40px, minimum text size 12px, body 14px. Nothing may overlap, clip or overflow horizontally at 1920, 1440, 1366, 1024 and 375px widths.

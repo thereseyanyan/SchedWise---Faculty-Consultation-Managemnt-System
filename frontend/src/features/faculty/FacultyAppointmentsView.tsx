@@ -1284,15 +1284,6 @@ export function FacultyAppointmentsView({
           {bulkFeedback.message}
         </div>
       ) : null}
-      <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted">
-        <span className="font-semibold text-ink">Keyboard</span>
-        <span><ShortcutKey>J</ShortcutKey> next</span>
-        <span><ShortcutKey>K</ShortcutKey> previous</span>
-        <span><ShortcutKey>A</ShortcutKey> accept</span>
-        <span><ShortcutKey>D</ShortcutKey> decline</span>
-        <span className="text-muted">A/D use the selected request or the first pending request.</span>
-      </div>
-
       <div className="mt-4 flex min-h-0 flex-1 gap-4">
         <div
           ref={pageFocusRef}
@@ -1638,14 +1629,6 @@ export function FacultyAppointmentsView({
         />
       ) : null}
     </div>
-  )
-}
-
-function ShortcutKey({ children }: { children: ReactNode }) {
-  return (
-    <kbd className="inline-flex h-5 min-w-5 items-center justify-center rounded-[5px] border border-border-card bg-white px-1 text-[12px] font-bold text-ink shadow-[0_1px_0_rgba(45,27,105,0.08)]">
-      {children}
-    </kbd>
   )
 }
 

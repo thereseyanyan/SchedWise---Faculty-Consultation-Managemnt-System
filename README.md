@@ -104,6 +104,8 @@ SchedWise provides:
 - No-show action for faculty/admin after the consultation end time, with audit entry and student notification
 - Student cancel/reschedule-request actions from **My Appointments**, with required reason, confirmation, and conflict retry
 - Header notification inbox for every role with unread count, per-notification and bulk mark-read, focus refresh, and 60-second polling; backed by the real notifications API
+- Faculty notifications include server-backed search, type/read/date filters, sorting, date grouping, loading/empty/error states, inline action errors, appointment status-aware actions, and account-scoped cache clearing. Appointment-linked messages use the existing appointment panel and show **This appointment is no longer available** when the related appointment cannot be read.
+- Missing notification integrations: **Snooze** and dismiss/delete are not implemented. Appointment links exist only when the notification includes a usable `related_appointment_id`; notifications without one do not fabricate a destination.
 - Student consultation history reads real `consultation_records`; appointment responses embed only the shared `summary`
 - Faculty Dashboard cards: Today's Consultations, Consultations for this week, a month calendar, recent notifications, and Today's schedule timeline
 - Faculty **Appointments** page with All/Pending/Upcoming/Past/Cancelled-Declined tabs, search, date range, status filters, sort, quick views, and pagination
@@ -363,7 +365,8 @@ SchedWise project root/
 - Complete confirmed appointments.
 - Reschedule their own appointments. Cancelling requires a written reason and confirmation.
 - Create consultation records for their completed appointments. Once saved, the calendar form is read-only; the complete record, including private notes, remains available in **Consultation Records**.
-- Read their notification inbox from the header.
+- Read their notification inbox from the header. Appointment-linked notifications include **View details**, which opens the matching appointment in the existing panel with its current-status actions; an inaccessible or deleted appointment shows an inline **This appointment is no longer available** message instead. Notifications whose linked appointment is still pending show **Accept** and **Decline**; reschedule requests show **Approve New Time** and **Decline**. Approve New Time re-fetches before submitting, uses the same approval workflow as the appointment panel, reports **This request was already handled** for stale requests, and keeps server availability or slot-conflict messages inline with **View details** available. Accept uses the existing confirmation dialog and re-fetches the appointment before submitting; if it was already handled, the dialog reports **This request was already handled** and the inbox refreshes instead. Decline uses the existing required-reason dialog and keeps server errors in the dialog. Successful responses mark the notification read and refresh its action availability.
+- Notification read state and appointment data are isolated when the signed-in account changes. Snooze and dismiss/delete remain missing integrations.
 - See the four most recent notifications on the Faculty Dashboard, mark one or all as read without leaving the page, and open the full inbox from the card.
 - See a compact month calendar on the Faculty Dashboard beside recent notifications. It marks confirmed consultations with solid amber dots and pending/reschedule-requested appointments with hollow amber dots, supports previous/next/Today navigation, and opens the existing **Calendar & Availability** view from its footer.
 - See a full-width **Today's schedule** timeline at the bottom of the Faculty Dashboard. It positions real active appointments by start and end time, places overlapping appointments side by side, marks pending and reschedule requests, shows today's open availability, a NOW marker, conflict and needs-closing counts, and opens the existing appointment panel.
@@ -587,6 +590,7 @@ All protected endpoints require a session cookie. Unsafe endpoints also require 
 | Method | Endpoint | Access | Purpose |
 | --- | --- | --- | --- |
 | GET | `/appointments/index.php` | authenticated | Role-scoped list/filter |
+| GET | `/appointments/index.php?id=...` | owner student, owner faculty, admin | Single appointment by ID; 403/404 when inaccessible |
 | POST | `/appointments/index.php` | student | Create own request |
 | PUT | `/appointments/approve.php?id=...` | faculty/admin | Approve |
 | PUT | `/appointments/reject.php?id=...` | faculty/admin | Reject with reason |
@@ -900,7 +904,7 @@ Use this before handing the project to someone:
 - [ ] A backup can be created and restored after stopping the app.
 - [ ] Stopping via `STOP SchedWise` closes ports 8000 and 5173, leaving MySQL running.
 
-**Last verified:** 2026-10-27 — faculty header search, Faculty Dashboard "Today's Consultations" metric, and "Consultations for this week" card. `npx tsc --noEmit` and `npm run build` passed. A headless Chrome run against seeded faculty data showed the daily card at **1 confirmed** for the local date while a future confirmed appointment was excluded; clicking the card opened **Today Appointments**. The weekly card used the `en-US` range **2026-10-25 through 2026-10-31**, showed **1**, and excluded the confirmed **2026-11-05** appointment; its label wrapped without clipping at 1920x1080, 1440x900, 1366x768, 1024x768, 768x900, and 640x900. The 375x667 view remains limited by the pre-existing fixed 248px faculty sidebar. Remaining console noise was limited to the pre-existing favicon 404 and two `/api/auth/me.php` 401s. The committed browser smoke test remained blocked by the local SMTP fixture safety check. **This paragraph was not reproduced during the 2026-11-04 documentation pass.** Prior timeline and calendar runs (2026-10-26) are **not verified** here.
+**Last verified:** 2026-11-09 — `npx tsc --noEmit` passed from `frontend`; `npm run build` passed; the notification tests passed (**13 tests**); and the audit/CSRF tests passed (**6 tests**). Pure notification coverage also passed for action availability, stale handling, required decline reasons, slot-conflict messages, and appointment-cache scope changes on account change. Live seeded-account notification checks were not run.
 
 The 2026-11-04 backend fix was checked offline (PHP lint, registration validation, audit/CSRF node tests, TypeScript). Full API and browser suites were not run because Mailpit is not auto-started.
 
@@ -1013,6 +1017,11 @@ Known risk areas:
 ## 15. Change Log
 
 Short, newest first. Older superseded entries were removed; use `git log` for full history.
+
+### 2026-11-09 — Notifications verification
+
+- Added focused pure tests for faculty notification action availability, stale requests, decline-reason validation, slot-conflict messages, and account-scoped appointment-cache clearing.
+- Documented the faculty notification states, missing Snooze and dismiss/delete integrations, and the read-only appointment lookup endpoint.
 
 ### 2026-11-04 — Faculty dashboard work
 

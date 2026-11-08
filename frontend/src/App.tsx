@@ -46,6 +46,8 @@ export default function App() {
   }, [])
 
   const role = user ? roleFromId(user.role_id) : null
+  const accountDialogPreview = import.meta.env.DEV &&
+    new URLSearchParams(window.location.search).get("account-dialog-preview") === "true"
 
   const handleSignOut = async () => {
     if (!await confirmAction("Are you sure you want to sign out?")) return
@@ -133,9 +135,11 @@ export default function App() {
         />
       )}
       <AccountSettingsDialog
-        open={accountOpen}
+        open={accountOpen || accountDialogPreview}
         onClose={() => setAccountOpen(false)}
         onUpdated={handleUserChange}
+        variant={role === "Faculty" ? "faculty" : "default"}
+        preview={accountDialogPreview && role === "Faculty"}
       />
     </CurrentUserContext.Provider>
   )

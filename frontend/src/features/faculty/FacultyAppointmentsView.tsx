@@ -218,9 +218,13 @@ function ActionSlot({ children }: { children?: ReactNode }) {
 export function FacultyAppointmentsView({
   onOpenRecords,
   onOpenAppointment,
+  openAppointmentId,
+  onOpenAppointmentHandled,
 }: {
   onOpenRecords?: (appointment?: Appointment) => void
   onOpenAppointment?: (appointment: Appointment) => void
+  openAppointmentId?: string | null
+  onOpenAppointmentHandled?: () => void
 }) {
   const [rows, setRows] = useState<Appointment[]>([])
   const [loading, setLoading] = useState(true)
@@ -280,6 +284,27 @@ export function FacultyAppointmentsView({
   useEffect(() => {
     void loadAppointments()
   }, [])
+
+  useEffect(() => {
+    if (!openAppointmentId || loading) return
+    const appointment = rows.find((row) => row.id === openAppointmentId)
+    if (!appointment) {
+      setError("This appointment is no longer available.")
+      onOpenAppointmentHandled?.()
+      return
+    }
+
+    setQuery("")
+    setDateFrom("")
+    setDateTo("")
+    setQuickView("")
+    setStatusFilter([])
+    setTab("all")
+    setSelectedId(appointment.id)
+    setPage(1)
+    setError("")
+    onOpenAppointmentHandled?.()
+  }, [openAppointmentId, loading, rows, onOpenAppointmentHandled])
 
   useEffect(() => {
     if (!notice) return

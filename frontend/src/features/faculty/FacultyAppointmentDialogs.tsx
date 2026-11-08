@@ -592,10 +592,12 @@ export function AcceptAppointmentDialog({
   appointment,
   onClose,
   onUpdated,
+  beforeAccept,
 }: {
   appointment: Appointment
   onClose: () => void
   onUpdated: (appointment: Appointment) => void
+  beforeAccept?: () => Promise<string | null>
 }) {
   const [busy, setBusy] = useState(false)
   const [submitError, setSubmitError] = useState("")
@@ -606,6 +608,12 @@ export function AcceptAppointmentDialog({
     setSubmitError("")
     setBusy(true)
     try {
+      const preflightError = beforeAccept ? await beforeAccept() : null
+      if (preflightError) {
+        setSubmitError(preflightError)
+        setBusy(false)
+        return
+      }
       const updated = await appointmentApi.approve(appointment.id)
       setBusy(false)
       onUpdated(updated)

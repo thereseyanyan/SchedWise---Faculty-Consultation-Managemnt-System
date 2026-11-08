@@ -115,6 +115,31 @@ export const datePartsInTimeZone = (timeZone?: string, now = new Date()) => {
 }
 export const todayInTimeZone = (timeZone?: string, now = new Date()) =>
   datePartsInTimeZone(timeZone, now).date
+export const dateKeyInTimeZone = (value: string, timeZone?: string) => {
+  const date = dateTimeInTimeZone(value, timeZone)
+  if (!date) return ""
+  return datePartsInTimeZone(timeZone, date).date
+}
+export const relativeDateHeading = (dateKey: string, timeZone?: string, now = new Date()) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return "Date unavailable"
+  const date = new Date(`${dateKey}T00:00:00Z`)
+  if (!Number.isFinite(date.getTime())) return "Date unavailable"
+
+  const today = todayInTimeZone(timeZone, now)
+  if (dateKey === today) return "Today"
+  const todayDate = fromIso(today)
+  if (dateKey === toIso(addDays(todayDate, -1))) return "Yesterday"
+  if (dateKey < today && dateKey >= toIso(startOfWeek(todayDate))) {
+    return "Earlier this week"
+  }
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(date)
+}
 export const consultationHasEnded = (date: string, endMinutes: number, timeZone?: string) => {
   const now = datePartsInTimeZone(timeZone)
   if (date < now.date) return true

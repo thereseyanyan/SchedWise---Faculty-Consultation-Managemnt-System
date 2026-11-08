@@ -81,6 +81,16 @@ export async function refreshNotifications(userId: string, force = false) {
   }
 }
 
+export function syncNotificationCounts(
+  userId: string,
+  counts: { unread: number },
+) {
+  if (!userId || state.userId !== userId) return
+  if (state.busyId || state.markingAll) return
+  if (state.unreadCount === counts.unread) return
+  publish({ ...state, unreadCount: counts.unread })
+}
+
 export async function markNotificationRead(userId: string, notification: AppNotification) {
   if (
     !userId ||

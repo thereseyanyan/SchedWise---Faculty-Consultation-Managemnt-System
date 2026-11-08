@@ -120,6 +120,7 @@ export function FacultyPortal({
   const currentUser = useContext(CurrentUserContext)
   const notifications = useNotifications(currentUser?.id ?? "")
   const [view, setView] = useState("Calendar & Availability")
+  const [pendingAppointmentId, setPendingAppointmentId] = useState<string | null>(null)
   const [calendarState, dispatchCalendar] = useReducer(
     calendarDemoReducer,
     createInitialCalendarDemoState(),
@@ -405,6 +406,8 @@ export function FacultyPortal({
       {!drilldown && view === "Appointments" && (
         <FacultyAppointmentsView
           onOpenRecords={() => setView("Consultation Records")}
+          openAppointmentId={pendingAppointmentId}
+          onOpenAppointmentHandled={() => setPendingAppointmentId(null)}
         />
       )}
       {!drilldown && view === "Calendar & Availability" && (
@@ -467,7 +470,15 @@ export function FacultyPortal({
           }}
         />
       )}
-      {!drilldown && view === "Notifications" && <FacultyNotificationsView />}
+      {!drilldown && view === "Notifications" && (
+        <FacultyNotificationsView
+          onViewAppointment={(appointmentId) => {
+            setPendingAppointmentId(appointmentId)
+            setDrilldown(null)
+            setView("Appointments")
+          }}
+        />
+      )}
     </FacultyPortalShell>
   )
 }

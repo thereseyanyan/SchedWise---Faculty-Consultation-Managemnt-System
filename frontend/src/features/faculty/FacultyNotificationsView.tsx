@@ -1,38 +1,61 @@
 import { useContext, useEffect, useMemo, useState } from "react"
-import { Bell, ChevronLeft, ChevronRight, Search } from "lucide-react"
-import { notificationsApi, type AppNotification, type NotificationPage } from "../../api"
-import { Button, CurrentUserContext, errorMessage, fromIso, todayInTimeZone } from "../../shared"
+import { Bell, ChevronLeft, ChevronRight, Eye, Search } from "lucide-react"
+import {
+  ApiError,
+  appointmentApi,
+  notificationsApi,
+  type Appointment,
+  type AppNotification,
+  type NotificationPage,
+} from "../../api"
+import {
+  Button,
+  CurrentUserContext,
+  dateKeyInTimeZone,
+  dateTimeInTimeZone,
+  errorMessage,
+  mergeAppointment,
+  relativeDateHeading,
+} from "../../shared"
 import {
   markAllNotificationsRead,
   markNotificationRead,
+  syncNotificationCounts,
   useNotifications,
 } from "../../shared/notificationsStore"
+import { confirmAction } from "../../confirmation"
+import {
+  REQUEST_ALREADY_HANDLED_MESSAGE,
+  appointmentViewErrorMessage,
+  isPendingRequestAppointment,
+  isRescheduleRequestStatus,
+  notificationAppointmentId,
+} from "./notificationAppointmentState"
+import {
+  AcceptAppointmentDialog,
+  DeclineAppointmentDialog,
+} from "./FacultyAppointmentDialogs"
+
+type NotificationActionTarget = {
+  action: "accept" | "decline"
+  notification: AppNotification
+  appointment: Appointment
+}
 
 const PAGE_SIZE = 25
 type ReadFilter = "all" | "unread"
 type SortOrder = "newest" | "oldest"
 
-function notificationDate(value: string) {
-  return /^\d{4}-\d{2}-\d{2}/.exec(value)?.[0] ?? ""
-}
-
-function dateHeading(date: string, timeZone?: string) {
-  const today = todayInTimeZone(timeZone)
-  if (date === today) return "Today"
-  const yesterday = fromIso(today)
-  yesterday.setDate(yesterday.getDate() - 1)
-  const yesterdayKey = [
-    yesterday.getFullYear(),
-    String(yesterday.getMonth() + 1).padStart(2, "0"),
-    String(yesterday.getDate()).padStart(2, "0"),
-  ].join("-")
-  if (date === yesterdayKey) return "Yesterday"
-  return fromIso(date).toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
+function notificationTimestamp(value: string, timeZone?: string) {
+  const createdAt = dateTimeInTimeZone(value, timeZone)
+  if (!createdAt) return "Time unavailable"
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
     day: "numeric",
-    year: "numeric",
-  })
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone,
+  }).format(createdAt)
 }
 
 function typeLabel(value: string) {
@@ -42,9 +65,14 @@ function typeLabel(value: string) {
     .join(" ")
 }
 
-export function FacultyNotificationsView() {
+export function FacultyNotificationsView({
+  onViewAppointment,
+}: {
+  onViewAppointment?: (appointmentId: string) => void
+}) {
   const currentUser = useContext(CurrentUserContext)
   const userId = currentUser?.id ?? ""
+  const timeZone = currentUser?.timezone
   const notifications = useNotifications(userId)
   const [search, setSearch] = useState("")
   const [readFilter, setReadFilter] = useState<ReadFilter>("all")
@@ -58,11 +86,40 @@ export function FacultyNotificationsView() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
+  const [openingId, setOpeningId] = useState("")
+  const [detailError, setDetailError] = useState<{ id: string; message: string } | null>(null)
+  const [appointments, setAppointments] = useState<Map<string, Appointment>>(new Map())
+  const [appointmentLoadError, setAppointmentLoadError] = useState("")
+  const [appointmentRetryKey, setAppointmentRetryKey] = useState(0)
+  const [actionTarget, setActionTarget] = useState<NotificationActionTarget | null>(null)
+  const [approvingId, setApprovingId] = useState("")
+  const [requestErrors, setRequestErrors] = useState<Record<string, string>>({})
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 250)
     return () => window.clearTimeout(timer)
   }, [search])
+
+  useEffect(() => {
+    if (!userId) return
+    let active = true
+    setAppointmentLoadError("")
+    void appointmentApi.list()
+      .then((rows) => {
+        if (!active) return
+        setAppointments(new Map(rows.map((appointment) => [appointment.id, appointment])))
+      })
+      .catch((cause: unknown) => {
+        if (!active) return
+        setAppointmentLoadError(errorMessage(
+          cause,
+          "Unable to load request actions.",
+        ))
+      })
+    return () => {
+      active = false
+    }
+  }, [userId, appointmentRetryKey])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -82,7 +139,9 @@ export function FacultyNotificationsView() {
       controller.signal,
     )
       .then((response) => {
+        if (controller.signal.aborted) return
         setResult(response)
+        syncNotificationCounts(userId, response.counts)
         setLoading(false)
       })
       .catch((cause: unknown) => {
@@ -107,13 +166,16 @@ export function FacultyNotificationsView() {
   const groupedItems = useMemo(() => {
     const groups = new Map<string, AppNotification[]>()
     result?.items.forEach((item) => {
-      const date = notificationDate(item.created_at)
-      const group = groups.get(date) ?? []
+      const heading = relativeDateHeading(
+        dateKeyInTimeZone(item.created_at, timeZone),
+        timeZone,
+      )
+      const group = groups.get(heading) ?? []
       group.push(item)
-      groups.set(date, group)
+      groups.set(heading, group)
     })
     return Array.from(groups.entries())
-  }, [result])
+  }, [result, timeZone])
 
   const filteredCount = result?.pagination.total ?? 0
   const totalCount = result?.counts.total ?? 0
@@ -129,6 +191,158 @@ export function FacultyNotificationsView() {
   const updateDateTo = (value: string) => {
     setDateTo(value)
     resetPage()
+  }
+
+  const openAppointmentDetails = async (notification: AppNotification) => {
+    const appointmentId = notificationAppointmentId(notification)
+    if (!appointmentId || !onViewAppointment || openingId) return
+
+    setOpeningId(notification.id)
+    setDetailError(null)
+    try {
+      const appointment = await appointmentApi.getById(appointmentId)
+      onViewAppointment(appointment.id)
+    } catch (cause) {
+      const message = cause instanceof ApiError
+        ? appointmentViewErrorMessage(cause.status, "Unable to open this appointment.")
+        : "Unable to open this appointment."
+      setDetailError({ id: notification.id, message })
+    } finally {
+      setOpeningId("")
+    }
+  }
+
+  const rememberAppointment = (appointment: Appointment) => {
+    setAppointments((current) => {
+      const next = new Map(current)
+      next.set(appointment.id, appointment)
+      return next
+    })
+    mergeAppointment(appointment)
+  }
+
+  const setRequestError = (notificationId: string, message: string) => {
+    setRequestErrors((current) => ({ ...current, [notificationId]: message }))
+  }
+
+  const clearRequestError = (notificationId: string) => {
+    setRequestErrors((current) => {
+      if (!(notificationId in current)) return current
+      const next = { ...current }
+      delete next[notificationId]
+      return next
+    })
+  }
+
+  const forgetAppointment = (appointmentId: string) => {
+    setAppointments((current) => {
+      const next = new Map(current)
+      next.delete(appointmentId)
+      return next
+    })
+  }
+
+  const refreshAppointment = async (appointmentId: string) => {
+    const appointment = await appointmentApi.getById(appointmentId)
+    rememberAppointment(appointment)
+    return appointment
+  }
+
+  const checkRequestStillPending = async (notification: AppNotification) => {
+    const appointmentId = notificationAppointmentId(notification)
+    if (!appointmentId) {
+      setRequestError(notification.id, REQUEST_ALREADY_HANDLED_MESSAGE)
+      return REQUEST_ALREADY_HANDLED_MESSAGE
+    }
+
+    try {
+      const appointment = await refreshAppointment(appointmentId)
+      if (!isPendingRequestAppointment(appointment)) {
+        setRequestError(notification.id, REQUEST_ALREADY_HANDLED_MESSAGE)
+        setRetryKey((value) => value + 1)
+        return REQUEST_ALREADY_HANDLED_MESSAGE
+      }
+      return null
+    } catch (cause) {
+      if (cause instanceof ApiError && (cause.status === 403 || cause.status === 404)) {
+        forgetAppointment(appointmentId)
+        setRequestError(
+          notification.id,
+          appointmentViewErrorMessage(cause.status, "This appointment is no longer available."),
+        )
+        setRetryKey((value) => value + 1)
+      }
+      return cause instanceof ApiError
+        ? appointmentViewErrorMessage(cause.status, "Unable to check this request. Try again.")
+        : "Unable to check this request. Try again."
+    }
+  }
+
+  const approveNewTime = async (
+    notification: AppNotification,
+    appointment: Appointment,
+  ) => {
+    if (approvingId || actionTarget) return
+    setApprovingId(notification.id)
+    try {
+      const confirmed = await confirmAction(
+        "Approve this new consultation time? The student will be notified of the confirmed schedule.",
+      )
+      if (!confirmed) return
+
+      clearRequestError(notification.id)
+      const current = await refreshAppointment(appointment.id)
+      if (!isRescheduleRequestStatus(current.status)) {
+        setRequestError(notification.id, REQUEST_ALREADY_HANDLED_MESSAGE)
+        setRetryKey((value) => value + 1)
+        return
+      }
+
+      const updated = await appointmentApi.approve(current.id)
+      handleRequestUpdated(notification, updated)
+    } catch (cause) {
+      if (cause instanceof ApiError && (cause.status === 403 || cause.status === 404)) {
+        forgetAppointment(appointment.id)
+        setRequestError(
+          notification.id,
+          appointmentViewErrorMessage(cause.status, "This appointment is no longer available."),
+        )
+        setRetryKey((value) => value + 1)
+        return
+      }
+      if (
+        cause instanceof ApiError &&
+        cause.status === 400 &&
+        /only pending or reschedule-requested/i.test(cause.message)
+      ) {
+        setRequestError(notification.id, REQUEST_ALREADY_HANDLED_MESSAGE)
+        setRetryKey((value) => value + 1)
+        void refreshAppointment(appointment.id).catch(() => undefined)
+        return
+      }
+      setRequestError(
+        notification.id,
+        errorMessage(cause, "Unable to approve this request. Try again."),
+      )
+      if (cause instanceof ApiError && (cause.status === 400 || cause.status === 409)) {
+        setRetryKey((value) => value + 1)
+        setAppointmentRetryKey((value) => value + 1)
+      }
+    } finally {
+      setApprovingId("")
+    }
+  }
+
+  const handleRequestUpdated = (
+    notification: AppNotification,
+    updated: Appointment,
+  ) => {
+    rememberAppointment(updated)
+    clearRequestError(notification.id)
+    setDetailError(null)
+    if (!notification.read_at) {
+      void markNotificationRead(userId, notification)
+    }
   }
 
   return (
@@ -285,6 +499,17 @@ export function FacultyNotificationsView() {
           {notifications.actionError}
         </p>
       ) : null}
+      {appointmentLoadError ? (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-amber/30 bg-amber-tint/60 px-4 py-3 text-[14px] text-amber-900" role="alert">
+          <span>{appointmentLoadError}</span>
+          <Button
+            onClick={() => setAppointmentRetryKey((value) => value + 1)}
+            className="h-9 rounded-[8px] border border-amber-700 bg-white px-3 text-[13px] font-semibold text-amber-900 hover:bg-amber-100"
+          >
+            Retry
+          </Button>
+        </div>
+      ) : null}
 
       <section className="mt-6 overflow-hidden rounded-[16px] border border-border-card bg-white shadow-card" aria-label="Notification list">
         {loading ? (
@@ -317,15 +542,31 @@ export function FacultyNotificationsView() {
           </div>
         ) : (
           <div className="max-h-[min(70vh,760px)] overflow-y-auto">
-            {groupedItems.map(([date, items]) => (
-              <section key={date} aria-label={date ? dateHeading(date, currentUser?.timezone) : "Date unavailable"}>
+            {groupedItems.map(([heading, items]) => (
+              <section key={heading} aria-label={heading}>
                 <h2 className="sticky top-0 z-10 border-y border-divider bg-page-bg/95 px-5 py-2 text-[13px] font-semibold text-muted backdrop-blur">
-                  {date ? dateHeading(date, currentUser?.timezone) : "Date unavailable"}
+                  {heading}
                 </h2>
                 <ul className="divide-y divide-divider">
                   {items.map((item) => {
                     const unread = !item.read_at
                     const busy = notifications.busyId === item.id
+                    const appointmentId = notificationAppointmentId(item)
+                    const opening = openingId === item.id
+                    const itemError = detailError?.id === item.id ? detailError.message : ""
+                    const requestError = requestErrors[item.id] ?? ""
+                    const linkedAppointment = appointmentId
+                      ? appointments.get(appointmentId) ?? null
+                      : null
+                    const requestAppointment = linkedAppointment &&
+                      isPendingRequestAppointment(linkedAppointment)
+                      ? linkedAppointment
+                      : null
+                    const actionsDisabled = Boolean(actionTarget) ||
+                      Boolean(openingId) ||
+                      Boolean(approvingId) ||
+                      notifications.busyId !== "" ||
+                      notifications.markingAll
                     return (
                       <li
                         key={item.id}
@@ -347,23 +588,83 @@ export function FacultyNotificationsView() {
                             {item.message}
                           </p>
                           <p className="mt-2 text-[12px] text-muted">
-                            {typeLabel(item.type)} · {item.created_at}
+                            {typeLabel(item.type)} · {notificationTimestamp(item.created_at, timeZone)}
                           </p>
+                          {itemError ? (
+                            <p role="alert" className="mt-2 rounded-[8px] border border-amber/30 bg-amber-tint/60 px-3 py-2 text-[12px] leading-5 text-amber-900">
+                              {itemError}
+                            </p>
+                          ) : null}
+                          {requestError ? (
+                            <p role="alert" className="mt-2 rounded-[8px] border border-amber/30 bg-amber-tint/60 px-3 py-2 text-[12px] leading-5 text-amber-900">
+                              {requestError}
+                            </p>
+                          ) : null}
                         </div>
-                        {unread ? (
-                          <Button
-                            disabled={busy || notifications.busyId !== "" || notifications.markingAll}
-                            aria-busy={busy}
-                            onClick={() => void markNotificationRead(userId, item)}
-                            className="h-9 shrink-0 whitespace-nowrap rounded-[8px] border border-primary bg-white px-3 text-[13px] font-semibold text-primary hover:bg-soft"
-                          >
-                            {busy ? "Saving…" : "Mark as read"}
-                          </Button>
-                        ) : (
-                          <span className="shrink-0 rounded-full bg-page-bg px-2.5 py-1 text-[12px] font-medium text-muted">
-                            Read
-                          </span>
-                        )}
+                        <div className="flex shrink-0 flex-col items-end gap-2">
+                          {requestAppointment ? (
+                            <div className="flex items-center gap-2">
+                              {isRescheduleRequestStatus(requestAppointment.status) ? (
+                                <Button
+                                  disabled={actionsDisabled}
+                                  aria-busy={approvingId === item.id}
+                                  onClick={() => void approveNewTime(item, requestAppointment)}
+                                  className="h-9 whitespace-nowrap rounded-[8px] bg-primary px-3 text-[13px] font-semibold text-white hover:bg-primary/90"
+                                >
+                                  {approvingId === item.id ? "Approving…" : "Approve New Time"}
+                                </Button>
+                              ) : (
+                                <Button
+                                  disabled={actionsDisabled}
+                                  onClick={() => setActionTarget({
+                                    action: "accept",
+                                    notification: item,
+                                    appointment: requestAppointment,
+                                  })}
+                                  className="h-9 whitespace-nowrap rounded-[8px] bg-primary px-3 text-[13px] font-semibold text-white hover:bg-primary/90"
+                                >
+                                  Accept
+                                </Button>
+                              )}
+                              <Button
+                                disabled={actionsDisabled}
+                                onClick={() => setActionTarget({
+                                  action: "decline",
+                                  notification: item,
+                                  appointment: requestAppointment,
+                                })}
+                                className="h-9 whitespace-nowrap rounded-[8px] border border-primary bg-white px-3 text-[13px] font-semibold text-primary hover:bg-soft"
+                              >
+                                Decline
+                              </Button>
+                            </div>
+                          ) : null}
+                          {unread ? (
+                            <Button
+                              disabled={busy || notifications.busyId !== "" || notifications.markingAll || Boolean(approvingId)}
+                              aria-busy={busy}
+                              onClick={() => void markNotificationRead(userId, item)}
+                              className="h-9 whitespace-nowrap rounded-[8px] border border-primary bg-white px-3 text-[13px] font-semibold text-primary hover:bg-soft"
+                            >
+                              {busy ? "Saving…" : "Mark as read"}
+                            </Button>
+                          ) : (
+                            <span className="rounded-full bg-page-bg px-2.5 py-1 text-[12px] font-medium text-muted">
+                              Read
+                            </span>
+                          )}
+                          {appointmentId && onViewAppointment ? (
+                            <Button
+                              disabled={Boolean(openingId)}
+                              aria-busy={opening}
+                              onClick={() => void openAppointmentDetails(item)}
+                              className="h-9 gap-1.5 whitespace-nowrap rounded-[8px] border border-border-card bg-white px-3 text-[13px] font-semibold text-ink hover:border-primary/30 hover:bg-soft"
+                            >
+                              <Eye size={14} />
+                              {opening ? "Opening…" : "View details"}
+                            </Button>
+                          ) : null}
+                        </div>
                       </li>
                     )
                   })}
@@ -397,6 +698,27 @@ export function FacultyNotificationsView() {
           </div>
         ) : null}
       </section>
+
+      {actionTarget?.action === "accept" ? (
+        <AcceptAppointmentDialog
+          appointment={actionTarget.appointment}
+          onClose={() => setActionTarget(null)}
+          beforeAccept={() => checkRequestStillPending(actionTarget.notification)}
+          onUpdated={(updated) => {
+            handleRequestUpdated(actionTarget.notification, updated)
+          }}
+        />
+      ) : null}
+
+      {actionTarget?.action === "decline" ? (
+        <DeclineAppointmentDialog
+          appointment={actionTarget.appointment}
+          onClose={() => setActionTarget(null)}
+          onUpdated={(updated) => {
+            handleRequestUpdated(actionTarget.notification, updated)
+          }}
+        />
+      ) : null}
     </div>
   )
 }

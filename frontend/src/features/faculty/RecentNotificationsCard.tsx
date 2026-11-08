@@ -1,7 +1,7 @@
 import { useContext } from "react"
 import { Bell, CalendarDays, CheckCircle2, Clock3, Info } from "lucide-react"
 import type { AppNotification } from "../../api"
-import { errorMessage, relativeTime } from "../../shared"
+import { relativeTime } from "../../shared"
 import { CurrentUserContext } from "../../shared/contexts"
 import {
   markAllNotificationsRead,
@@ -32,10 +32,10 @@ export function RecentNotificationsCard() {
   const currentUser = useContext(CurrentUserContext)
   const userId = currentUser?.id ?? ""
   const notifications = useNotifications(userId)
-  const { items, unreadCount, loaded, loading } = notifications
+  const { items, unreadCount, loaded, loading, loadError } = notifications
   const unread = unreadCount ?? 0
-  const error = notifications.loadError || notifications.actionError
   const visible = items.slice(0, MAX_VISIBLE)
+  const hasVisibleItems = visible.length > 0
 
   const markAllRead = () => void markAllNotificationsRead(userId)
   const markRead = (notification: AppNotification) =>
@@ -78,7 +78,7 @@ export function RecentNotificationsCard() {
             </div>
           ))}
         </div>
-      ) : error ? (
+      ) : loadError && !hasVisibleItems ? (
         <div role="alert" className="mt-4 rounded-[12px] border border-amber bg-amber-tint/60 px-4 py-6 text-center max-sm:px-2">
           <p className="text-[13px] text-ink max-sm:break-words">
             Couldn't load notifications ·{" "}
@@ -91,7 +91,7 @@ export function RecentNotificationsCard() {
             </button>
           </p>
         </div>
-      ) : visible.length === 0 ? (
+      ) : !hasVisibleItems ? (
         <div className="mt-4 flex flex-1 min-h-0 flex-col items-center justify-center rounded-[12px] border border-dashed border-border-card bg-page-bg px-4 py-8 text-center max-sm:px-2">
           <span className="mx-auto flex size-8 items-center justify-center rounded-[8px] bg-soft text-primary">
             <Bell size={16} />
@@ -136,6 +136,18 @@ export function RecentNotificationsCard() {
         </div>
       )}
 
+      {loadError && hasVisibleItems ? (
+        <p role="alert" className="mt-2 rounded-[8px] bg-amber-tint/60 px-2.5 py-1.5 text-[12px] text-ink max-sm:break-words">
+          Couldn't refresh notifications ·{" "}
+          <button
+            type="button"
+            onClick={() => { void refreshNotifications(userId, true) }}
+            className="font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-primary"
+          >
+            Retry
+          </button>
+        </p>
+      ) : null}
       {notifications.notice ? (
         <p role="status" className="mt-2 rounded-[8px] bg-green-tint px-2.5 py-1.5 text-[12px] text-green max-sm:break-words">
           {notifications.notice}

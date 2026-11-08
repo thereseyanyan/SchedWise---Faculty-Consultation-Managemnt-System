@@ -3,6 +3,10 @@ import type { Appointment, AppNotification } from "../../api"
 export const APPOINTMENT_UNAVAILABLE_MESSAGE = "This appointment is no longer available."
 export const REQUEST_ALREADY_HANDLED_MESSAGE = "This request was already handled."
 
+export function accountScopeChanged(previousUserId: string, nextUserId: string) {
+  return previousUserId !== nextUserId
+}
+
 const PENDING_REQUEST_STATUSES: Appointment["status"][] = [
   "pending",
   "reschedule_requested",

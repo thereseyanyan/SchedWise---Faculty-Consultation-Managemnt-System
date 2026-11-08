@@ -8,7 +8,8 @@ import { StudentPortal } from "./features/student/StudentPortal"
 import { FacultyPortal } from "./features/faculty/FacultyPortal"
 import { AdminPortal } from "./features/admin/AdminPortal"
 import { AccountSettingsDialog } from "./features/account/AccountSettingsDialog"
-import { Button, CurrentUserContext, roleFromId } from "./shared"
+import { Button, CurrentUserContext, resetAppointments, roleFromId } from "./shared"
+import { resetNotifications } from "./shared/notificationsStore"
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null)
@@ -19,6 +20,8 @@ export default function App() {
   useEffect(() => {
     const expireSession = () => {
       setAccountOpen(false)
+      resetNotifications()
+      resetAppointments()
       setUser(null)
     }
     window.addEventListener("schedwise:session-expired", expireSession)
@@ -51,8 +54,18 @@ export default function App() {
     } catch (err) {
       console.error("Logout request failed.", err)
     }
+    resetNotifications()
+    resetAppointments()
     setAccountOpen(false)
     setUser(null)
+  }
+
+  const handleUserChange = (nextUser: User) => {
+    if (user?.id !== nextUser.id) {
+      resetNotifications()
+      resetAppointments()
+    }
+    setUser(nextUser)
   }
 
   if (loading) {
@@ -78,9 +91,9 @@ export default function App() {
     )
   }
 
-  if (!user) return <AuthenticationGate onLogin={setUser} />
+  if (!user) return <AuthenticationGate onLogin={handleUserChange} />
 
-  if (user.must_change_password) return <RequiredPasswordChange onChanged={setUser} onSignOut={handleSignOut} />
+  if (user.must_change_password) return <RequiredPasswordChange onChanged={handleUserChange} onSignOut={handleSignOut} />
 
   if (!role) {
     return (
@@ -122,7 +135,7 @@ export default function App() {
       <AccountSettingsDialog
         open={accountOpen}
         onClose={() => setAccountOpen(false)}
-        onUpdated={setUser}
+        onUpdated={handleUserChange}
       />
     </CurrentUserContext.Provider>
   )

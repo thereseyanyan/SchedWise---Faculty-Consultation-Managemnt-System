@@ -238,6 +238,7 @@ function ReasonDialog({
   busyLabel,
   dismissLabel,
   quickReasons,
+  beforeSubmit,
   onClose,
   onUpdated,
 }: {
@@ -249,6 +250,7 @@ function ReasonDialog({
   busyLabel: string
   dismissLabel: string
   quickReasons?: readonly string[]
+  beforeSubmit?: () => Promise<string | null>
   onClose: () => void
   onUpdated: (appointment: Appointment) => void
 }) {
@@ -272,6 +274,12 @@ function ReasonDialog({
     setSubmitError("")
     setBusy(true)
     try {
+      const preflightError = beforeSubmit ? await beforeSubmit() : null
+      if (preflightError) {
+        setSubmitError(preflightError)
+        setBusy(false)
+        return
+      }
       const result = await submitReason(kind, reason, (value) =>
         kind === "decline"
           ? appointmentApi.reject(appointment.id, value)
@@ -385,10 +393,12 @@ function ReasonDialog({
 
 export function DeclineAppointmentDialog({
   appointment,
+  beforeSubmit,
   onClose,
   onUpdated,
 }: {
   appointment: Appointment
+  beforeSubmit?: () => Promise<string | null>
   onClose: () => void
   onUpdated: (appointment: Appointment) => void
 }) {
@@ -405,6 +415,7 @@ export function DeclineAppointmentDialog({
       busyLabel="Declining..."
       dismissLabel="Keep request"
       quickReasons={DECLINE_QUICK_REASONS}
+      beforeSubmit={beforeSubmit}
       onClose={onClose}
       onUpdated={onUpdated}
     />

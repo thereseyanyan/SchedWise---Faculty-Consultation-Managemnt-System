@@ -43,6 +43,7 @@ import {
   todayInTimeZone,
 } from "../../shared"
 import { FacultyAppointmentDetailPanel } from "./FacultyAppointmentDetailPanel"
+import { subscribeAppointmentRefresh } from "../../shared/appointments"
 import {
   AcceptAppointmentDialog,
   BulkDeclineAppointmentsDialog,
@@ -263,27 +264,43 @@ export function FacultyAppointmentsView({
   const filterPopoverTriggerRef = useRef<HTMLButtonElement>(null)
   const menuTriggerRef = useRef<HTMLButtonElement>(null)
   const menuItemsRef = useRef<HTMLDivElement>(null)
+  const loadRequestRef = useRef(0)
   const currentUser = useContext(CurrentUserContext)
+  const userId = currentUser?.id ?? ""
   const timeZone = currentUser?.timezone
   const today = todayInTimeZone(timeZone)
   const pageSize = density === "comfortable" ? 8 : 10
   const canBulkManage = currentUser?.role_id === "faculty" || currentUser?.role_id === "admin"
 
   const loadAppointments = async () => {
+    const currentRequest = ++loadRequestRef.current
     setLoading(true)
     setError("")
     try {
-      setRows(await appointmentApi.list())
+      const nextRows = await appointmentApi.list()
+      if (loadRequestRef.current !== currentRequest) return
+      setRows(nextRows)
     } catch (err) {
+      if (loadRequestRef.current !== currentRequest) return
       setError(errorMessage(err, "Unable to load appointments."))
     } finally {
-      setLoading(false)
+      if (loadRequestRef.current === currentRequest) setLoading(false)
     }
   }
 
   useEffect(() => {
     void loadAppointments()
-  }, [])
+  }, [userId])
+
+  useEffect(() => {
+    const unsubscribe = subscribeAppointmentRefresh(() => {
+      void loadAppointments()
+    })
+    return () => {
+      loadRequestRef.current += 1
+      unsubscribe()
+    }
+  }, [userId])
 
   useEffect(() => {
     if (!openAppointmentId || loading) return

@@ -137,7 +137,7 @@ export function FacultyPortal({
   const [calendarSaving, setCalendarSaving] = useState(false)
   const [calendarSaveNotice, setCalendarSaveNotice] = useState("")
   const [recordCount, setRecordCount] = useState<number>()
-  const [appointments] = useAppointments()
+  const [appointments] = useAppointments(currentUser?.id ?? "")
   const [availability, setAvailability] = useState<FacultyAvailability[]>([])
   const [overrides, setOverrides] = useState<ScheduleOverride[]>([])
   const name = fullName(currentUser?.first_name, currentUser?.last_name, currentUser?.email ?? "Faculty")

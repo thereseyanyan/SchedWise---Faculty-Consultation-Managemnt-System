@@ -12,6 +12,7 @@ type NotificationsState = {
   busyId: string
   markingAll: boolean
   actionError: string
+  actionErrorId: string
   notice: string
   revision: number
 }
@@ -26,6 +27,7 @@ const emptyState = (userId = ""): NotificationsState => ({
   busyId: "",
   markingAll: false,
   actionError: "",
+  actionErrorId: "",
   notice: "",
   revision: 0,
 })
@@ -48,10 +50,15 @@ function activate(userId: string) {
   publish(emptyState(userId))
 }
 
+export function resetNotifications() {
+  requestId += 1
+  publish(emptyState())
+}
+
 export async function refreshNotifications(userId: string, force = false) {
   if (!userId) return
   activate(userId)
-  if (state.loading || (state.loaded && !force)) return
+  if ((state.loading && !force) || (state.loaded && !force)) return
 
   const currentRequest = ++requestId
   publish({
@@ -102,10 +109,16 @@ export async function markNotificationRead(userId: string, notification: AppNoti
     return
   }
 
-  publish({ ...state, busyId: notification.id, actionError: "", notice: "" })
+  publish({ ...state, busyId: notification.id, actionError: "", actionErrorId: "", notice: "" })
+  const currentRequest = ++requestId
   try {
     await notificationsApi.markRead(notification.id)
-    requestId += 1
+    if (state.userId !== userId || requestId !== currentRequest) {
+      if (state.userId === userId && state.busyId === notification.id) {
+        publish({ ...state, busyId: "" })
+      }
+      return
+    }
     const now = new Date().toISOString()
     publish({
       ...state,
@@ -117,15 +130,23 @@ export async function markNotificationRead(userId: string, notification: AppNoti
       busyId: "",
       loading: false,
       actionError: "",
+      actionErrorId: "",
       notice: "Notification marked as read.",
       revision: state.revision + 1,
     })
     if (state.unreadCount === null) void refreshNotifications(userId, true)
   } catch (error) {
+    if (state.userId !== userId || requestId !== currentRequest) {
+      if (state.userId === userId && state.busyId === notification.id) {
+        publish({ ...state, busyId: "" })
+      }
+      return
+    }
     publish({
       ...state,
       busyId: "",
       actionError: errorMessage(error, "Unable to mark this notification as read."),
+      actionErrorId: notification.id,
       notice: "",
     })
   }
@@ -134,10 +155,16 @@ export async function markNotificationRead(userId: string, notification: AppNoti
 export async function markAllNotificationsRead(userId: string) {
   if (!userId || state.userId !== userId || state.markingAll || state.busyId) return
 
-  publish({ ...state, markingAll: true, actionError: "", notice: "" })
+  publish({ ...state, markingAll: true, actionError: "", actionErrorId: "", notice: "" })
+  const currentRequest = ++requestId
   try {
     await notificationsApi.markAllRead()
-    requestId += 1
+    if (state.userId !== userId || requestId !== currentRequest) {
+      if (state.userId === userId && state.markingAll) {
+        publish({ ...state, markingAll: false })
+      }
+      return
+    }
     const now = new Date().toISOString()
     publish({
       ...state,
@@ -148,14 +175,22 @@ export async function markAllNotificationsRead(userId: string) {
       markingAll: false,
       loading: false,
       actionError: "",
+      actionErrorId: "",
       notice: "All notifications marked as read.",
       revision: state.revision + 1,
     })
   } catch (error) {
+    if (state.userId !== userId || requestId !== currentRequest) {
+      if (state.userId === userId && state.markingAll) {
+        publish({ ...state, markingAll: false })
+      }
+      return
+    }
     publish({
       ...state,
       markingAll: false,
       actionError: errorMessage(error, "Unable to mark notifications as read."),
+      actionErrorId: "",
       notice: "",
     })
   }

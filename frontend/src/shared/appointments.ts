@@ -7,12 +7,16 @@ import {
   type UiAppointment,
 } from "../api"
 import { fullName, initialsOf } from "./utils"
+import { accountScopeChanged } from "../features/faculty/notificationAppointmentState"
 
 export const EMPTY_APPOINTMENTS: UiAppointment[] = []
 
 let apptCache: UiAppointment[] | null = null
 export const apptListeners = new Set<() => void>()
+const refreshListeners = new Set<() => void>()
 let remoteLoadStarted = false
+let activeUserId = ""
+let appointmentRequestId = 0
 
 export const toUiAppointment = (row: Appointment): UiAppointment => {
   const student = fullName(row.student_first_name, row.student_last_name, row.student_id)
@@ -35,7 +39,39 @@ export const writeAppts = (next: UiAppointment[]) => {
   apptListeners.forEach((listener) => listener())
 }
 
-export const mergeAppointment = (row: Appointment) => {
+export const resetAppointments = () => {
+  appointmentRequestId += 1
+  activeUserId = ""
+  remoteLoadStarted = false
+  writeAppts([])
+}
+
+export const refreshAppointments = async (userId: string, force = false) => {
+  if (!userId) return
+  if (accountScopeChanged(activeUserId, userId)) {
+    appointmentRequestId += 1
+    activeUserId = userId
+    remoteLoadStarted = false
+    writeAppts([])
+  }
+  if (remoteLoadStarted && !force) return
+
+  remoteLoadStarted = true
+  const currentRequest = ++appointmentRequestId
+  try {
+    const rows = await appointmentApi.list()
+    if (activeUserId !== userId || appointmentRequestId !== currentRequest) return
+    writeAppts(rows.map(toUiAppointment))
+    refreshListeners.forEach((listener) => listener())
+  } catch (error) {
+    if (activeUserId === userId && appointmentRequestId === currentRequest) {
+      console.error("Unable to load appointments from the PHP API.", error)
+    }
+  }
+}
+
+export const mergeAppointment = (row: Appointment, userId = activeUserId) => {
+  if (activeUserId && userId && activeUserId !== userId) return
   const next = apptCache ? [...apptCache] : []
   const uiRow = toUiAppointment(row)
   const index = next.findIndex((a) => a.id === row.id)
@@ -51,21 +87,19 @@ export const subscribeAppts = (listener: () => void) => {
   }
 }
 
-export function useAppointments() {
+export const subscribeAppointmentRefresh = (listener: () => void) => {
+  refreshListeners.add(listener)
+  return () => refreshListeners.delete(listener)
+}
+
+export function useAppointments(userId = "") {
   useEffect(() => {
-    if (remoteLoadStarted) return
-    remoteLoadStarted = true
-    void appointmentApi
-      .list()
-      .then((rows) => {
-        apptCache = rows.map(toUiAppointment)
-        apptListeners.forEach((listener) => listener())
-      })
-      .catch((error: unknown) => {
-        console.error("Unable to load appointments from the PHP API.", error)
-        apptListeners.forEach((listener) => listener())
-      })
-  }, [])
+    void refreshAppointments(userId)
+    if (!userId || typeof window === "undefined") return
+    const onFocus = () => void refreshAppointments(userId, true)
+    window.addEventListener("focus", onFocus)
+    return () => window.removeEventListener("focus", onFocus)
+  }, [userId])
   const list = useSyncExternalStore(subscribeAppts, readAppts)
   const update = (fn: (current: UiAppointment[]) => UiAppointment[]) =>
     writeAppts(fn(readAppts()))

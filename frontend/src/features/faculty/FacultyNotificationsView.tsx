@@ -15,6 +15,7 @@ import {
   dateTimeInTimeZone,
   errorMessage,
   mergeAppointment,
+  refreshAppointments,
   relativeDateHeading,
 } from "../../shared"
 import {
@@ -26,6 +27,7 @@ import {
 import { confirmAction } from "../../confirmation"
 import {
   REQUEST_ALREADY_HANDLED_MESSAGE,
+  APPOINTMENT_UNAVAILABLE_MESSAGE,
   appointmentViewErrorMessage,
   isPendingRequestAppointment,
   isRescheduleRequestStatus,
@@ -182,8 +184,20 @@ export function FacultyNotificationsView({
   const unreadCount = notifications.unreadCount ?? result?.counts.unread ?? 0
   const totalPages = result?.pagination.total_pages ?? 1
   const invalidDateRange = Boolean(dateFrom && dateTo && dateFrom > dateTo)
+  const hasActiveFilters = Boolean(
+    search || typeFilter || dateFrom || dateTo || readFilter !== "all" || sort !== "newest",
+  )
 
   const resetPage = () => setPage(1)
+  const clearFilters = () => {
+    setSearch("")
+    setReadFilter("all")
+    setTypeFilter("")
+    setDateFrom("")
+    setDateTo("")
+    setSort("newest")
+    setPage(1)
+  }
   const updateDateFrom = (value: string) => {
     setDateFrom(value)
     resetPage()
@@ -206,6 +220,9 @@ export function FacultyNotificationsView({
       const message = cause instanceof ApiError
         ? appointmentViewErrorMessage(cause.status, "Unable to open this appointment.")
         : "Unable to open this appointment."
+      if (cause instanceof ApiError && (cause.status === 403 || cause.status === 404)) {
+        forgetAppointment(appointmentId)
+      }
       setDetailError({ id: notification.id, message })
     } finally {
       setOpeningId("")
@@ -218,7 +235,7 @@ export function FacultyNotificationsView({
       next.set(appointment.id, appointment)
       return next
     })
-    mergeAppointment(appointment)
+    mergeAppointment(appointment, userId)
   }
 
   const setRequestError = (notificationId: string, message: string) => {
@@ -338,6 +355,7 @@ export function FacultyNotificationsView({
     updated: Appointment,
   ) => {
     rememberAppointment(updated)
+    void refreshAppointments(userId, true)
     clearRequestError(notification.id)
     setDetailError(null)
     if (!notification.read_at) {
@@ -470,7 +488,7 @@ export function FacultyNotificationsView({
                   setReadFilter(filter)
                   resetPage()
                 }}
-                className={`min-h-9 rounded-[8px] px-3 text-[14px] font-semibold transition ${
+                className={`min-h-9 rounded-[8px] px-3 text-[14px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 ${
                   readFilter === filter ? "bg-white text-primary shadow-sm" : "text-muted hover:text-ink"
                 }`}
               >
@@ -494,7 +512,7 @@ export function FacultyNotificationsView({
           {notifications.notice}
         </p>
       ) : null}
-      {notifications.actionError ? (
+      {notifications.actionError && !notifications.actionErrorId ? (
         <p className="mt-4 rounded-[10px] border border-amber/30 bg-amber-tint/60 px-4 py-3 text-[14px] text-amber-900" role="alert">
           {notifications.actionError}
         </p>
@@ -513,8 +531,20 @@ export function FacultyNotificationsView({
 
       <section className="mt-6 overflow-hidden rounded-[16px] border border-border-card bg-white shadow-card" aria-label="Notification list">
         {loading ? (
-          <div className="flex min-h-32 items-center justify-center px-5 py-8 text-[14px] text-muted" role="status">
-            Loading notifications…
+          <div className="flex flex-col gap-3 px-5 py-4" role="status" aria-busy="true" aria-label="Loading notifications">
+            {Array.from({ length: 5 }, (_, index) => (
+              <div key={index} className="animate-pulse rounded-[12px] border border-divider px-4 py-4">
+                <div className="flex items-start gap-3">
+                  <div className="mt-1 size-2.5 shrink-0 rounded-full bg-soft" />
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <div className="h-3.5 w-1/3 rounded bg-soft" />
+                    <div className="h-3 w-2/3 rounded bg-soft" />
+                    <div className="h-3 w-1/4 rounded bg-soft" />
+                  </div>
+                  <div className="h-9 w-24 shrink-0 rounded-[8px] bg-soft" />
+                </div>
+              </div>
+            ))}
           </div>
         ) : error ? (
           <div className="m-4 flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-rose-200 bg-rose-50 px-4 py-3 text-[14px] text-rose-800" role="alert">
@@ -532,13 +562,21 @@ export function FacultyNotificationsView({
               <Bell size={19} aria-hidden />
             </span>
             <h2 className="mt-4 text-[15px] font-semibold text-ink">
-              {totalCount === 0 ? "No notifications yet" : "No notifications match these filters"}
+              {totalCount === 0 ? "You’re all caught up" : "No notifications match these filters"}
             </h2>
             <p className="mt-1 max-w-md text-[14px] leading-6 text-muted">
               {totalCount === 0
                 ? "Appointment updates and account notices will appear here."
                 : "Try changing the search, read status, type, or date range."}
             </p>
+            {totalCount > 0 && hasActiveFilters ? (
+              <Button
+                onClick={clearFilters}
+                className="mt-4 h-9 rounded-[8px] border border-primary bg-white px-3 text-[13px] font-semibold text-primary hover:bg-soft"
+              >
+                Clear filters
+              </Button>
+            ) : null}
           </div>
         ) : (
           <div className="max-h-[min(70vh,760px)] overflow-y-auto">
@@ -555,10 +593,14 @@ export function FacultyNotificationsView({
                     const opening = openingId === item.id
                     const itemError = detailError?.id === item.id ? detailError.message : ""
                     const requestError = requestErrors[item.id] ?? ""
+                    const readError = notifications.actionErrorId === item.id
+                      ? notifications.actionError
+                      : ""
+                    const appointmentUnavailable = itemError === APPOINTMENT_UNAVAILABLE_MESSAGE
                     const linkedAppointment = appointmentId
                       ? appointments.get(appointmentId) ?? null
                       : null
-                    const requestAppointment = linkedAppointment &&
+                    const requestAppointment = !appointmentUnavailable && linkedAppointment &&
                       isPendingRequestAppointment(linkedAppointment)
                       ? linkedAppointment
                       : null
@@ -570,7 +612,7 @@ export function FacultyNotificationsView({
                     return (
                       <li
                         key={item.id}
-                        className={`flex min-w-0 items-start gap-3 px-5 py-4 ${
+                        className={`flex min-w-0 flex-col gap-3 px-5 py-4 lg:flex-row lg:items-start ${
                           unread ? "bg-soft/40" : "bg-white"
                         }`}
                       >
@@ -587,8 +629,10 @@ export function FacultyNotificationsView({
                           <p className="mt-1 whitespace-pre-wrap break-words text-[14px] leading-6 text-muted">
                             {item.message}
                           </p>
-                          <p className="mt-2 text-[12px] text-muted">
-                            {typeLabel(item.type)} · {notificationTimestamp(item.created_at, timeZone)}
+                          <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted">
+                            <span>{typeLabel(item.type)}</span>
+                            <span aria-hidden="true">·</span>
+                            <span>{unread ? "Unread" : "Read"}</span>
                           </p>
                           {itemError ? (
                             <p role="alert" className="mt-2 rounded-[8px] border border-amber/30 bg-amber-tint/60 px-3 py-2 text-[12px] leading-5 text-amber-900">
@@ -600,8 +644,13 @@ export function FacultyNotificationsView({
                               {requestError}
                             </p>
                           ) : null}
+                          {readError ? (
+                            <p role="alert" className="mt-2 rounded-[8px] border border-amber/30 bg-amber-tint/60 px-3 py-2 text-[12px] leading-5 text-amber-900">
+                              {readError}
+                            </p>
+                          ) : null}
                         </div>
-                        <div className="flex shrink-0 flex-col items-end gap-2">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2 lg:max-w-[42%] lg:justify-end">
                           {requestAppointment ? (
                             <div className="flex items-center gap-2">
                               {isRescheduleRequestStatus(requestAppointment.status) ? (
@@ -626,17 +675,19 @@ export function FacultyNotificationsView({
                                   Accept
                                 </Button>
                               )}
-                              <Button
-                                disabled={actionsDisabled}
-                                onClick={() => setActionTarget({
-                                  action: "decline",
-                                  notification: item,
-                                  appointment: requestAppointment,
-                                })}
-                                className="h-9 whitespace-nowrap rounded-[8px] border border-primary bg-white px-3 text-[13px] font-semibold text-primary hover:bg-soft"
-                              >
-                                Decline
-                              </Button>
+                              {!isRescheduleRequestStatus(requestAppointment.status) ? (
+                                <Button
+                                  disabled={actionsDisabled}
+                                  onClick={() => setActionTarget({
+                                    action: "decline",
+                                    notification: item,
+                                    appointment: requestAppointment,
+                                  })}
+                                  className="h-9 whitespace-nowrap rounded-[8px] border border-primary bg-white px-3 text-[13px] font-semibold text-primary hover:bg-soft"
+                                >
+                                  Decline
+                                </Button>
+                              ) : null}
                             </div>
                           ) : null}
                           {unread ? (
@@ -653,10 +704,11 @@ export function FacultyNotificationsView({
                               Read
                             </span>
                           )}
-                          {appointmentId && onViewAppointment ? (
+                          {appointmentId && onViewAppointment && !appointmentUnavailable ? (
                             <Button
                               disabled={Boolean(openingId)}
                               aria-busy={opening}
+                              aria-label={opening ? "Opening appointment details" : "View appointment details"}
                               onClick={() => void openAppointmentDetails(item)}
                               className="h-9 gap-1.5 whitespace-nowrap rounded-[8px] border border-border-card bg-white px-3 text-[13px] font-semibold text-ink hover:border-primary/30 hover:bg-soft"
                             >
@@ -665,6 +717,12 @@ export function FacultyNotificationsView({
                             </Button>
                           ) : null}
                         </div>
+                        <time
+                          dateTime={item.created_at}
+                          className="shrink-0 text-left text-[12px] text-muted lg:min-w-[108px] lg:text-right"
+                        >
+                          {notificationTimestamp(item.created_at, timeZone)}
+                        </time>
                       </li>
                     )
                   })}
@@ -714,6 +772,7 @@ export function FacultyNotificationsView({
         <DeclineAppointmentDialog
           appointment={actionTarget.appointment}
           onClose={() => setActionTarget(null)}
+          beforeSubmit={() => checkRequestStillPending(actionTarget.notification)}
           onUpdated={(updated) => {
             handleRequestUpdated(actionTarget.notification, updated)
           }}

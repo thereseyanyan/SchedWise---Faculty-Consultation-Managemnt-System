@@ -96,7 +96,7 @@ export function RecentNotificationsCard() {
           <span className="mx-auto flex size-8 items-center justify-center rounded-[8px] bg-soft text-primary">
             <Bell size={16} />
           </span>
-          <p className="mt-3 text-[14px] font-semibold text-ink max-sm:break-words">No notifications yet</p>
+          <p className="mt-3 text-[14px] font-semibold text-ink max-sm:break-words">You’re all caught up</p>
           <p className="mt-1 text-[13px] text-muted max-sm:break-words">
             Appointment updates and account notices will appear here.
           </p>
@@ -107,6 +107,9 @@ export function RecentNotificationsCard() {
             const Icon = iconForType(item.type)
             const unreadItem = !item.read_at
             const saving = notifications.busyId === item.id
+            const readError = notifications.actionErrorId === item.id
+              ? notifications.actionError
+              : ""
             return (
               <button
                 key={item.id}
@@ -126,6 +129,11 @@ export function RecentNotificationsCard() {
                 <span className="min-w-0 flex-1 max-sm:basis-full">
                   <span className="block truncate text-[14px] font-semibold text-ink">{item.title}</span>
                   <span className="mt-0.5 block truncate text-[13px] text-muted">{item.message}</span>
+                  {readError ? (
+                    <span role="alert" className="mt-2 block rounded-[8px] bg-amber-tint/60 px-2 py-1 text-[12px] leading-5 text-amber-900">
+                      {readError}
+                    </span>
+                  ) : null}
                 </span>
                 <span className="w-[72px] shrink-0 whitespace-nowrap pt-0.5 text-right text-[12px] text-muted max-sm:w-auto max-sm:basis-full">
                   {relativeTime(item.created_at, currentUser?.timezone)}
@@ -153,7 +161,7 @@ export function RecentNotificationsCard() {
           {notifications.notice}
         </p>
       ) : null}
-      {notifications.actionError ? (
+      {notifications.actionError && !notifications.actionErrorId ? (
         <p role="alert" className="mt-2 rounded-[8px] bg-amber-tint/60 px-2.5 py-1.5 text-[12px] text-ink max-sm:break-words">
           {notifications.actionError}
         </p>

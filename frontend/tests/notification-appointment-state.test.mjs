@@ -10,6 +10,11 @@ import {
   isRescheduleRequestStatus,
   notificationAppointmentId,
 } from "../src/features/faculty/notificationAppointmentState.ts";
+import {
+  submitReason,
+  validateNewTimeSelection,
+} from "../src/features/faculty/appointmentDialogState.ts";
+import { accountScopeChanged } from "../src/features/faculty/notificationAppointmentState.ts";
 
 test("appointment notifications expose their linked appointment", () => {
   assert.equal(
@@ -64,4 +69,62 @@ test("reschedule approval is limited to reschedule-requested appointments", () =
 
 test("handled requests use one consistent status message", () => {
   assert.equal(REQUEST_ALREADY_HANDLED_MESSAGE, "This request was already handled.");
+});
+
+test("stale notifications stop offering mutation actions", () => {
+  assert.equal(isPendingRequestStatus("confirmed"), false);
+  assert.equal(isPendingRequestStatus("completed"), false);
+  assert.equal(REQUEST_ALREADY_HANDLED_MESSAGE, "This request was already handled.");
+});
+
+test("decline requires a non-empty reason before submitting", async () => {
+  let submitted = false;
+  const result = await submitReason("decline", "  ", async () => {
+    submitted = true;
+    return "unexpected";
+  });
+
+  assert.deepEqual(result, {
+    ok: false,
+    error: "Enter a reason before declining this request.",
+  });
+  assert.equal(submitted, false);
+});
+
+test("slot conflicts map to actionable availability messages", () => {
+  const appointment = {
+    id: "appointment-1",
+    faculty_id: "faculty-1",
+    appointment_date: "2026-11-10",
+    start_minutes: 540,
+    end_minutes: 570,
+    status: "pending",
+  };
+
+  const missingSlot = validateNewTimeSelection({
+    appointment,
+    selection: { date: "2026-11-10", startMinutes: 600 },
+    slots: [],
+    appointments: [],
+  });
+  assert.equal(missingSlot.conflict, "The selected time is no longer available. Choose another time.");
+
+  const overlappingSlot = validateNewTimeSelection({
+    appointment,
+    selection: { date: "2026-11-10", startMinutes: 600 },
+    slots: [{ date: "2026-11-10", start_minutes: 600 }],
+    appointments: [{
+      ...appointment,
+      id: "appointment-2",
+      start_minutes: 615,
+      end_minutes: 645,
+      status: "confirmed",
+    }],
+  });
+  assert.equal(overlappingSlot.conflict, "That time now overlaps with another appointment. Choose another time.");
+});
+
+test("account changes use a separate appointment cache scope", () => {
+  assert.equal(accountScopeChanged("faculty-a", "faculty-b"), true);
+  assert.equal(accountScopeChanged("faculty-a", "faculty-a"), false);
 });

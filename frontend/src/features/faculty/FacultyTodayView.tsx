@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react"
+import { useContext, useEffect, useRef, useState, type FormEvent } from "react"
 import { AlertCircle, CalendarDays, CheckCircle2, Clock3, Info, X } from "lucide-react"
 import { appointmentApi, type Appointment } from "../../api"
 import { confirmAction } from "../../confirmation"
@@ -19,9 +19,11 @@ import {
   pillField,
   pillLabel,
   relativeTime,
+  subscribeAppointmentRefresh,
   toIso,
   toUiAppointment,
 } from "../../shared"
+import { CurrentUserContext } from "../../shared/contexts"
 
 const DIALOG_FOCUSABLE_SELECTOR =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
@@ -134,6 +136,8 @@ export function FacultyTodayView({
 }: {
   onViewAppointments?: () => void
 }) {
+  const currentUser = useContext(CurrentUserContext)
+  const userId = currentUser?.id ?? ""
   const [requests, setRequests] = useState<IncomingRequest[]>([])
   const [upcoming, setUpcoming] = useState<Appointment[]>([])
   const [calendarAppointments, setCalendarAppointments] = useState<Appointment[]>([])
@@ -144,12 +148,15 @@ export function FacultyTodayView({
   const [declineReason, setDeclineReason] = useState("")
   const [declineError, setDeclineError] = useState("")
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null)
+  const loadRequestRef = useRef(0)
 
   const loadData = async () => {
+    const currentRequest = ++loadRequestRef.current
     setLoading(true)
     setError(null)
     try {
       const appointments = await appointmentApi.list()
+      if (loadRequestRef.current !== currentRequest) return
       const studentName = (appt: Appointment) =>
         fullName(appt.student_first_name, appt.student_last_name, `Student ID: ${appt.student_id}`)
 
@@ -181,6 +188,7 @@ export function FacultyTodayView({
       setUpcoming(upcomingList)
       setCalendarAppointments(appointments)
     } catch (err) {
+      if (loadRequestRef.current !== currentRequest) return
       setError(errorMessage(err, "Failed to load appointments"))
       setRequests([])
       setUpcoming([])
@@ -191,8 +199,15 @@ export function FacultyTodayView({
   }
 
   useEffect(() => {
-    loadData()
-  }, [])
+    void loadData()
+    const unsubscribe = subscribeAppointmentRefresh(() => {
+      void loadData()
+    })
+    return () => {
+      loadRequestRef.current += 1
+      unsubscribe()
+    }
+  }, [userId])
 
   const openDecline = (request: IncomingRequest) => {
     setDeclineTarget(request)

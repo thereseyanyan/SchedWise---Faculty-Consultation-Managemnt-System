@@ -17,6 +17,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     // Authenticate user
     $user = authenticateUser();
 
+    $requestedId = $_GET['id'] ?? null;
+    if (is_string($requestedId) && $requestedId !== '') {
+        $appointment = fetchAppointmentById($requestedId);
+        if (!$appointment) {
+            respond(['error' => 'Appointment not found'], 404);
+        }
+
+        $canView = $user['role_id'] === 'admin'
+            || ($user['role_id'] === 'faculty' && $appointment['faculty_id'] === $user['id'])
+            || ($user['role_id'] === 'student' && $appointment['student_id'] === $user['id']);
+        if (!$canView) {
+            respond(['error' => 'Insufficient permissions to view this appointment'], 403);
+        }
+
+        respond($appointment);
+    }
+
     // Get query parameters for filtering
     $studentId = $_GET['student_id'] ?? null;
     $facultyId = $_GET['faculty_id'] ?? null;

@@ -56,7 +56,7 @@ const fieldLabelClass = "mb-2 block text-[12px] font-semibold text-muted"
 const selectClass =
   "h-10 w-full rounded-[10px] border border-border-card bg-white px-3 text-[14px] font-medium text-ink outline-none transition focus:border-primary focus:ring-[3px] focus:ring-primary/15"
 const dateClass =
-  "h-10 min-w-[150px] rounded-[10px] border border-border-card bg-white px-3 text-[14px] font-medium text-ink outline-none transition focus:border-primary focus:ring-[3px] focus:ring-primary/15"
+  "h-10 min-w-[150px] flex-1 rounded-[10px] border border-border-card bg-white px-3 text-[14px] font-medium text-ink outline-none transition focus:border-primary focus:ring-[3px] focus:ring-primary/15"
 
 const toneClass = {
   success: "border-green/20 bg-green-tint text-green",
@@ -295,28 +295,43 @@ export function FacultyRecordsView({ onNewRecord }: { onNewRecord?: () => void }
 
   return (
     <div data-testid="faculty-records-view">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-primary">
-            Consultation records
-          </p>
-          <h1 className="mt-2 font-[var(--font-display)] text-[28px] font-semibold leading-tight tracking-tight text-ink">
-            Consultation History &amp; Records
-          </h1>
-          <p className="mt-2 max-w-2xl text-[14px] leading-6 text-muted">
-            Review past consultations and narrow the archive by student, department, date, or
-            status.
-          </p>
           <p
-            className="mt-2 text-[13px] font-medium text-muted"
+            className="text-[13px] font-medium text-muted"
             role="status"
             aria-live="polite"
           >
             {countLabel}
           </p>
         </div>
+        <label className="relative min-w-[220px] flex-1">
+          <span className="sr-only">Search</span>
+          <Search
+            size={16}
+            aria-hidden
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
+          />
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Student name, ID, or topic"
+            className="h-10 w-full rounded-[10px] border border-border-card bg-white pl-10 pr-10 text-[14px] font-medium text-ink outline-none transition placeholder:font-normal placeholder:text-muted focus:border-primary focus:ring-[3px] focus:ring-primary/15"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              className="absolute right-1.5 top-1/2 flex size-7 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full text-muted transition hover:bg-soft hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              aria-label="Clear search"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </label>
         {canCreate && onNewRecord && (
-          <div className="flex shrink-0 flex-wrap items-center gap-2 sm:pt-6">
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
             <Button
               onClick={onNewRecord}
               disabled={awaitingRecordCount === 0}
@@ -338,36 +353,8 @@ export function FacultyRecordsView({ onNewRecord }: { onNewRecord?: () => void }
         className="mt-6 rounded-[16px] border border-border-card bg-white p-5 shadow-card"
         aria-label="Record filters"
       >
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(240px,1fr)_170px_170px_160px]">
-          <label className="min-w-0 md:col-span-2 xl:col-span-1">
-            <span className={fieldLabelClass}>Search</span>
-            <span className="relative block">
-              <Search
-                size={16}
-                aria-hidden
-                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
-              />
-              <input
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Student name, ID, or topic"
-                className="h-10 w-full rounded-[10px] border border-border-card bg-white pl-10 pr-10 text-[14px] font-medium text-ink outline-none transition placeholder:font-normal placeholder:text-muted focus:border-primary focus:ring-[3px] focus:ring-primary/15"
-              />
-              {query && (
-                <button
-                  type="button"
-                  onClick={() => setQuery("")}
-                  className="absolute right-1.5 top-1/2 flex size-7 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full text-muted transition hover:bg-soft hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                  aria-label="Clear search"
-                >
-                  <X size={14} />
-                </button>
-              )}
-            </span>
-          </label>
-
-          <label className="min-w-0">
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="min-w-[170px] flex-1">
             <span className={fieldLabelClass}>Department</span>
             <select
               aria-label="Department"
@@ -384,7 +371,7 @@ export function FacultyRecordsView({ onNewRecord }: { onNewRecord?: () => void }
             </select>
           </label>
 
-          <label className="min-w-0">
+          <label className="min-w-[170px] flex-1">
             <span className={fieldLabelClass}>Status</span>
             <select
               aria-label="Status"
@@ -401,7 +388,7 @@ export function FacultyRecordsView({ onNewRecord }: { onNewRecord?: () => void }
             </select>
           </label>
 
-          <label className="min-w-0">
+          <label className="min-w-[170px] flex-1">
             <span className={fieldLabelClass}>Sort by date</span>
             <select
               aria-label="Sort by date"
@@ -413,10 +400,7 @@ export function FacultyRecordsView({ onNewRecord }: { onNewRecord?: () => void }
               <option value="date-asc">Oldest first</option>
             </select>
           </label>
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-end justify-between gap-3 border-t border-divider pt-4">
-          <div>
+          <div className="min-w-[340px] flex-[1.5]">
             <span className={fieldLabelClass}>Date range</span>
             <div className="flex flex-wrap items-center gap-2">
               <input

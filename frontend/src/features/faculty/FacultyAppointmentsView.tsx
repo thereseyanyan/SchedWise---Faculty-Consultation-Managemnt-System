@@ -971,7 +971,7 @@ export function FacultyAppointmentsView({
         ref={toolbarRef}
         className="relative mt-4 flex flex-wrap items-center gap-2 xl:flex-nowrap xl:gap-3"
       >
-        <label className="relative min-w-[220px] flex-1 xl:max-w-[330px]">
+        <label className="relative min-w-[220px] flex-1">
           <span className="sr-only">Search appointments</span>
           <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-primary" />
           <input

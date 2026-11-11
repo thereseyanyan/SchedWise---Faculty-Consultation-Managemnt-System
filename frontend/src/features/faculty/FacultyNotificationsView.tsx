@@ -11,12 +11,16 @@ import {
 import {
   Button,
   CurrentUserContext,
+  addDays,
   dateKeyInTimeZone,
   dateTimeInTimeZone,
   errorMessage,
+  fromIso,
   mergeAppointment,
   refreshAppointments,
   relativeDateHeading,
+  todayInTimeZone,
+  toIso,
 } from "../../shared"
 import {
   markAllNotificationsRead,
@@ -47,6 +51,13 @@ type NotificationActionTarget = {
 const PAGE_SIZE = 25
 type ReadFilter = "all" | "unread"
 type SortOrder = "newest" | "oldest"
+const rangePresets = [
+  { id: "all", label: "All time", days: 0 },
+  { id: "today", label: "Today", days: 1 },
+  { id: "last7", label: "Last 7 days", days: 7 },
+  { id: "last30", label: "Last 30 days", days: 30 },
+] as const
+type RangePresetId = (typeof rangePresets)[number]["id"]
 
 function notificationTimestamp(value: string, timeZone?: string) {
   const createdAt = dateTimeInTimeZone(value, timeZone)
@@ -81,6 +92,7 @@ export function FacultyNotificationsView({
   const [typeFilter, setTypeFilter] = useState("")
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
+  const [rangePreset, setRangePreset] = useState<RangePresetId | "custom">("all")
   const [sort, setSort] = useState<SortOrder>("newest")
   const [page, setPage] = useState(1)
   const [retryKey, setRetryKey] = useState(0)
@@ -195,15 +207,31 @@ export function FacultyNotificationsView({
     setTypeFilter("")
     setDateFrom("")
     setDateTo("")
+    setRangePreset("all")
     setSort("newest")
     setPage(1)
   }
+  const applyRangePreset = (preset: RangePresetId) => {
+    setRangePreset(preset)
+    if (preset === "all") {
+      setDateFrom("")
+      setDateTo("")
+    } else {
+      const span = rangePresets.find((item) => item.id === preset)?.days ?? 1
+      const today = todayInTimeZone(timeZone)
+      setDateFrom(toIso(addDays(fromIso(today), -(span - 1))))
+      setDateTo(today)
+    }
+    resetPage()
+  }
   const updateDateFrom = (value: string) => {
     setDateFrom(value)
+    setRangePreset("custom")
     resetPage()
   }
   const updateDateTo = (value: string) => {
     setDateTo(value)
+    setRangePreset("custom")
     resetPage()
   }
 
@@ -365,18 +393,56 @@ export function FacultyNotificationsView({
 
   return (
     <div className="min-w-0" data-testid="faculty-notifications-view">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-primary">
-            Inbox
-          </p>
-          <h1 className="mt-2 font-[var(--font-display)] text-[28px] font-semibold leading-tight tracking-tight text-ink">
-            Notifications
-          </h1>
-          <p className="mt-2 text-[14px] leading-6 text-muted">
-            {filteredCount} matching {filteredCount === 1 ? "notification" : "notifications"} of{" "}
-            {totalCount} total · {unreadCount} unread across your account
-          </p>
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          <div
+            className="inline-flex flex-wrap rounded-[10px] border border-border-card bg-page-bg p-1"
+            role="group"
+            aria-label="Notification read status"
+          >
+            {(["all", "unread"] as const).map((filter) => (
+              <button
+                key={filter}
+                type="button"
+                aria-pressed={readFilter === filter}
+                onClick={() => {
+                  setReadFilter(filter)
+                  resetPage()
+                }}
+                className={`min-h-9 rounded-[8px] px-3 text-[14px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 ${
+                  readFilter === filter ? "bg-primary text-white" : "text-muted hover:bg-soft hover:text-ink"
+                }`}
+              >
+                {filter === "all" ? "All" : "Unread"}{" "}
+                <span
+                  className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[12px] font-bold tabular-nums ${
+                    readFilter === filter ? "bg-white/20 text-white" : "bg-soft text-ink"
+                  }`}
+                >
+                  {filter === "all" ? totalCount : unreadCount}
+                </span>
+              </button>
+            ))}
+          </div>
+          <div
+            className="inline-flex flex-wrap rounded-[10px] border border-border-card bg-page-bg p-1"
+            role="group"
+            aria-label="Notification time range"
+          >
+            {rangePresets.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                aria-pressed={rangePreset === preset.id}
+                onClick={() => applyRangePreset(preset.id)}
+                className={`min-h-9 rounded-[8px] px-3 text-[14px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 ${
+                  rangePreset === preset.id ? "bg-primary text-white" : "text-muted hover:bg-soft hover:text-ink"
+                }`}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="flex shrink-0 flex-col items-start gap-1 sm:items-end">
           <Button
@@ -474,37 +540,14 @@ export function FacultyNotificationsView({
                 className="h-10 min-w-0 flex-1 rounded-[10px] border border-border-card bg-white px-2 text-[14px] text-ink outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/15"
               />
             </div>
+            {invalidDateRange ? (
+              <p className="mt-1.5 text-[12px] font-medium text-rose-700" role="alert">
+                Start date must be on or before end date.
+              </p>
+            ) : null}
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-divider pt-4">
-          <div className="inline-flex rounded-[10px] border border-border-card bg-page-bg p-1" role="group" aria-label="Notification read status">
-            {(["all", "unread"] as const).map((filter) => (
-              <button
-                key={filter}
-                type="button"
-                aria-pressed={readFilter === filter}
-                onClick={() => {
-                  setReadFilter(filter)
-                  resetPage()
-                }}
-                className={`min-h-9 rounded-[8px] px-3 text-[14px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 ${
-                  readFilter === filter ? "bg-white text-primary shadow-sm" : "text-muted hover:text-ink"
-                }`}
-              >
-                {filter === "all" ? "All" : "Unread"}{" "}
-                <span className="tabular-nums">
-                  {filter === "all" ? totalCount : unreadCount}
-                </span>
-              </button>
-            ))}
-          </div>
-          {invalidDateRange ? (
-            <p className="text-[12px] font-medium text-rose-700" role="alert">
-              Start date must be on or before end date.
-            </p>
-          ) : null}
-        </div>
       </section>
 
       {notifications.notice ? (

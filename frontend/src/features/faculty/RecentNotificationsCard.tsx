@@ -28,7 +28,11 @@ function toneForType(type: string) {
   return "bg-soft text-primary"
 }
 
-export function RecentNotificationsCard() {
+export function RecentNotificationsCard({
+  onOpenNotifications,
+}: {
+  onOpenNotifications?: () => void
+}) {
   const currentUser = useContext(CurrentUserContext)
   const userId = currentUser?.id ?? ""
   const notifications = useNotifications(userId)
@@ -40,10 +44,6 @@ export function RecentNotificationsCard() {
   const markAllRead = () => void markAllNotificationsRead(userId)
   const markRead = (notification: AppNotification) =>
     void markNotificationRead(userId, notification)
-
-  const openInbox = () => {
-    document.querySelector<HTMLButtonElement>('button[aria-label^="Notifications"]')?.click()
-  }
 
   return (
     <section className="mt-0 w-full h-full min-h-0 flex flex-col rounded-[16px] border border-border-card bg-card p-5 shadow-card max-sm:p-1">
@@ -170,7 +170,7 @@ export function RecentNotificationsCard() {
       <div className="mt-auto pt-4 text-center">
         <button
           type="button"
-          onClick={openInbox}
+          onClick={() => onOpenNotifications?.()}
           className="inline-flex items-center gap-1 text-[14px] font-semibold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-primary max-sm:block max-sm:w-full max-sm:break-words"
         >
           See all notifications <span aria-hidden="true">→</span>

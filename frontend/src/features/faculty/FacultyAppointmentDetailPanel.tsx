@@ -13,6 +13,8 @@ import {
   Loader2,
   Lock,
   MapPin,
+  MessageSquare,
+  Pencil,
   Timer,
   X,
 } from "lucide-react"
@@ -325,6 +327,11 @@ export function FacultyAppointmentDetailPanel({
   const [recordsLoading, setRecordsLoading] = useState(true)
   const [recordsError, setRecordsError] = useState("")
   const [recordsReload, setRecordsReload] = useState(0)
+  const [notesEditing, setNotesEditing] = useState(false)
+  const [draftSummary, setDraftSummary] = useState("")
+  const [draftNotes, setDraftNotes] = useState("")
+  const [notesSaving, setNotesSaving] = useState(false)
+  const [notesError, setNotesError] = useState("")
 
   const name = fullName(
     appointment.student_first_name,
@@ -396,6 +403,8 @@ export function FacultyAppointmentDetailPanel({
     bodyRef.current?.scrollTo({ top: 0 })
     setReasonExpanded(false)
     setCopyState("idle")
+    setNotesEditing(false)
+    setNotesError("")
   }, [appointment.id])
 
   useEffect(() => {
@@ -449,6 +458,38 @@ export function FacultyAppointmentDetailPanel({
       setCopyState("error")
     }
     copyTimerRef.current = window.setTimeout(() => setCopyState("idle"), 3000)
+  }
+
+  const canManageNotes = !recordsLoading && !recordsError
+  const startNotesEditing = () => {
+    setDraftSummary(currentRecord?.summary ?? "")
+    setDraftNotes(currentRecord?.private_notes ?? "")
+    setNotesError("")
+    setNotesEditing(true)
+  }
+  const saveConsultationNotes = async () => {
+    if (notesSaving) return
+    if (!draftSummary.trim()) {
+      setNotesError("Enter shared feedback before saving.")
+      return
+    }
+    setNotesSaving(true)
+    setNotesError("")
+    try {
+      await consultationApi.create({
+        appointment_id: appointment.id,
+        faculty_id: appointment.faculty_id,
+        student_id: appointment.student_id,
+        summary: draftSummary.trim(),
+        private_notes: draftNotes.trim() ? draftNotes.trim() : undefined,
+      })
+      setNotesEditing(false)
+      setRecordsReload((value) => value + 1)
+    } catch (error) {
+      setNotesError(errorMessage(error, "Unable to save consultation notes."))
+    } finally {
+      setNotesSaving(false)
+    }
   }
 
   return (
@@ -677,32 +718,146 @@ export function FacultyAppointmentDetailPanel({
           </ol>
         </section>
 
-        <section aria-labelledby="panel-private-notes-heading">
-          <div className="flex items-center justify-between gap-3">
-            <h2 id="panel-private-notes-heading" className="flex items-center gap-1.5 text-[12px] font-semibold text-muted">
-              <Lock size={13} /> Private notes
-            </h2>
-            <span className="text-[12px] font-medium text-muted">Faculty only</span>
-          </div>
-          {recordsLoading ? (
-            <div className="mt-3 animate-pulse rounded-[10px] border border-divider bg-soft/40 px-3 py-4">
-              <div className="h-3 w-2/3 rounded bg-border" />
-              <div className="mt-2 h-3 w-full rounded bg-border" />
+        {notesEditing ? (
+          <section aria-label="Edit consultation notes">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="flex items-center gap-1.5 text-[12px] font-semibold text-muted">
+                <Pencil size={13} /> Consultation notes
+              </h2>
+              <span className="text-[12px] font-medium text-muted">Faculty only</span>
             </div>
-          ) : recordsError ? (
-            <p className="mt-3 rounded-[10px] border border-rose-200 bg-rose-50 px-3 py-3 text-[12px] leading-5 text-rose-700">
-              Private notes could not be loaded.
-            </p>
-          ) : currentRecord?.private_notes?.trim() ? (
-            <p className="mt-3 whitespace-pre-wrap break-words rounded-[10px] border border-border-card bg-soft/40 px-3 py-3 text-[13px] leading-6 text-ink">
-              {currentRecord.private_notes.trim()}
-            </p>
-          ) : (
-            <p className="mt-3 rounded-[10px] border border-dashed border-border-card px-3 py-4 text-[12px] leading-5 text-muted">
-              No private notes recorded for this consultation.
-            </p>
-          )}
-        </section>
+            <label className="mt-3 block">
+              <span className="text-[12px] font-semibold text-muted">Shared feedback (visible to the student)</span>
+              <textarea
+                rows={3}
+                maxLength={10000}
+                value={draftSummary}
+                onChange={(event) => setDraftSummary(event.target.value)}
+                placeholder="Agreed actions and follow-up instructions"
+                className="mt-1.5 w-full resize-y rounded-[10px] border border-border-card bg-white px-3 py-2 text-[13px] leading-6 text-ink outline-none transition placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-primary/15"
+              />
+            </label>
+            <label className="mt-3 block">
+              <span className="text-[12px] font-semibold text-muted">Private notes (faculty only)</span>
+              <textarea
+                rows={4}
+                maxLength={10000}
+                value={draftNotes}
+                onChange={(event) => setDraftNotes(event.target.value)}
+                placeholder="Confidential notes for the assigned faculty member only"
+                className="mt-1.5 w-full resize-y rounded-[10px] border border-border-card bg-white px-3 py-2 text-[13px] leading-6 text-ink outline-none transition placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-primary/15"
+              />
+            </label>
+            {notesError ? (
+              <p role="alert" className="mt-2 rounded-[10px] border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] leading-5 text-rose-700">
+                {notesError}
+              </p>
+            ) : null}
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+              <p className="min-w-0 flex-1 text-[12px] leading-5 text-muted">
+                Shared feedback is visible to the student. Private notes stay faculty-only.
+              </p>
+              <div className="flex shrink-0 items-center gap-2">
+                <Button
+                  type="button"
+                  disabled={notesSaving}
+                  onClick={() => setNotesEditing(false)}
+                  className="h-9 rounded-full border border-border-card bg-white px-4 text-[12px] font-semibold text-muted transition hover:border-primary/30 hover:bg-soft hover:text-primary"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  disabled={notesSaving || !draftSummary.trim()}
+                  onClick={() => { void saveConsultationNotes() }}
+                  className="h-9 gap-1.5 rounded-full bg-primary px-4 text-[12px] font-semibold text-white transition hover:opacity-90"
+                >
+                  {notesSaving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                  {notesSaving ? "Saving..." : "Save notes"}
+                </Button>
+              </div>
+            </div>
+          </section>
+        ) : (
+          <>
+            <section aria-labelledby="panel-shared-feedback-heading">
+              <div className="flex items-center justify-between gap-3">
+                <h2 id="panel-shared-feedback-heading" className="flex items-center gap-1.5 text-[12px] font-semibold text-muted">
+                  <MessageSquare size={13} /> Shared feedback
+                </h2>
+                {canManageNotes ? (
+                  <button
+                    type="button"
+                    aria-label="Edit shared feedback and private notes"
+                    title="Edit shared feedback and private notes"
+                    onClick={startNotesEditing}
+                    className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted transition hover:bg-soft hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+                  >
+                    <Pencil size={14} />
+                  </button>
+                ) : null}
+              </div>
+              {recordsLoading ? (
+                <div className="mt-3 animate-pulse rounded-[10px] border border-divider bg-soft/40 px-3 py-4">
+                  <div className="h-3 w-2/3 rounded bg-border" />
+                  <div className="mt-2 h-3 w-full rounded bg-border" />
+                </div>
+              ) : recordsError ? (
+                <p className="mt-3 rounded-[10px] border border-rose-200 bg-rose-50 px-3 py-3 text-[12px] leading-5 text-rose-700">
+                  Shared feedback could not be loaded.
+                </p>
+              ) : currentRecord?.summary?.trim() ? (
+                <p className="mt-3 whitespace-pre-wrap break-words rounded-[10px] border border-border-card bg-soft/40 px-3 py-3 text-[13px] leading-6 text-ink">
+                  {currentRecord.summary.trim()}
+                </p>
+              ) : (
+                <p className="mt-3 rounded-[10px] border border-dashed border-border-card px-3 py-4 text-[12px] leading-5 text-muted">
+                  No shared feedback recorded for this consultation.
+                </p>
+              )}
+            </section>
+
+            <section aria-labelledby="panel-private-notes-heading">
+              <div className="flex items-center justify-between gap-3">
+                <h2 id="panel-private-notes-heading" className="flex items-center gap-1.5 text-[12px] font-semibold text-muted">
+                  <Lock size={13} /> Private notes
+                </h2>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <span className="text-[12px] font-medium text-muted">Faculty only</span>
+                  {canManageNotes ? (
+                    <button
+                      type="button"
+                      aria-label="Add shared feedback and private notes"
+                      title="Add shared feedback and private notes"
+                      onClick={startNotesEditing}
+                      className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted transition hover:bg-soft hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+              {recordsLoading ? (
+                <div className="mt-3 animate-pulse rounded-[10px] border border-divider bg-soft/40 px-3 py-4">
+                  <div className="h-3 w-2/3 rounded bg-border" />
+                  <div className="mt-2 h-3 w-full rounded bg-border" />
+                </div>
+              ) : recordsError ? (
+                <p className="mt-3 rounded-[10px] border border-rose-200 bg-rose-50 px-3 py-3 text-[12px] leading-5 text-rose-700">
+                  Private notes could not be loaded.
+                </p>
+              ) : currentRecord?.private_notes?.trim() ? (
+                <p className="mt-3 whitespace-pre-wrap break-words rounded-[10px] border border-border-card bg-soft/40 px-3 py-3 text-[13px] leading-6 text-ink">
+                  {currentRecord.private_notes.trim()}
+                </p>
+              ) : (
+                <p className="mt-3 rounded-[10px] border border-dashed border-border-card px-3 py-4 text-[12px] leading-5 text-muted">
+                  No private notes recorded for this consultation.
+                </p>
+              )}
+            </section>
+          </>
+        )}
 
         <section aria-labelledby="panel-records-heading">
           <div className="flex items-center justify-between gap-3">

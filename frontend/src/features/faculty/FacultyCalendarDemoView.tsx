@@ -6,7 +6,6 @@ import {
   Search,
   X,
 } from "lucide-react"
-import { PageTitle } from "../../shared"
 import { CalendarEventCreationDialog } from "./CalendarEventCreationDialog"
 import { CalendarEventLifecycleDialog } from "./CalendarEventLifecycleDialog"
 import { CalendarSchedulePrintDialog } from "./CalendarSchedulePrintDialog"
@@ -1454,12 +1453,133 @@ export function FacultyCalendarDemoView({
           {lifecycleAnnouncement}
         </div>
       ) : null}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <PageTitle
-          eyebrow="Faculty calendar"
-          title="Calendar & Availability"
-          description="Plan classes, consultations, and open hours for your students."
-        />
+      <div className="mt-2 flex flex-wrap items-center justify-end gap-4">
+        <div className="relative min-w-[220px] flex-1">
+          <label htmlFor="calendar-demo-search" className="sr-only">Search dates or events</label>
+          <Search size={16} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+          <input
+            ref={searchInputRef}
+            id="calendar-demo-search"
+            type="search"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={searchOpen && Boolean(searchQuery.trim())}
+            aria-controls="calendar-search-results"
+            aria-activedescendant={searchOpen && searchResults.length
+              ? `calendar-search-result-${activeSearchIndex}`
+              : undefined}
+            placeholder="Search names, topics, rooms, dates"
+            value={searchQuery}
+            onFocus={() => {
+              if (searchQuery.trim()) setSearchOpen(true)
+            }}
+            onChange={(event) => {
+              setSearchQuery(event.target.value)
+              setSearchOpen(Boolean(event.target.value.trim()))
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                if (searchOpen) {
+                  event.preventDefault()
+                  setSearchOpen(false)
+                }
+                return
+              }
+              if (event.key === "ArrowDown" && searchResults.length) {
+                event.preventDefault()
+                setSearchOpen(true)
+                setActiveSearchIndex((index) => (index + 1) % searchResults.length)
+              } else if (event.key === "ArrowUp" && searchResults.length) {
+                event.preventDefault()
+                setSearchOpen(true)
+                setActiveSearchIndex((index) => (index - 1) % searchResults.length)
+              } else if (event.key === "Enter" && searchOpen && searchResults.length) {
+                event.preventDefault()
+                searchEventAt(activeSearchIndex)
+              }
+            }}
+            className="h-10 w-full rounded-full border border-border-card bg-white pl-9 pr-10 text-sm text-ink placeholder:text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/15"
+          />
+          {searchQuery ? (
+            <button
+              type="button"
+              aria-label="Clear search"
+              onClick={() => {
+                setSearchQuery("")
+                setSearchOpen(false)
+                setActiveSearchIndex(0)
+                searchInputRef.current?.focus()
+              }}
+              className="absolute right-2 top-1/2 inline-flex size-7 -translate-y-1/2 items-center justify-center rounded-full text-muted hover:bg-soft focus-visible:outline-2 focus-visible:outline-primary"
+            >
+              <X size={15} />
+            </button>
+          ) : null}
+          {searchOpen && searchQuery.trim() ? (
+            <div
+              ref={searchResultsRef}
+              id="calendar-search-results"
+              role="listbox"
+              aria-label="Calendar search results"
+              className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 max-h-[min(55dvh,420px)] overflow-y-auto overscroll-contain rounded-xl border border-border-card bg-white shadow-card"
+            >
+              <p className="sticky top-0 z-10 border-b border-divider bg-page-bg px-3 py-2 text-xs text-muted">
+                Search is restricted by active filters:
+                {" "}{[
+                  !state.filters.classes ? "Classes hidden" : "",
+                  !state.filters.consultations ? "Consultations hidden" : "",
+                  !state.filters.pending ? "Pending hidden" : "",
+                  !state.filters.openSlots ? "Open slots hidden" : "",
+                  !state.filters.blockedTime ? "Blocked time hidden" : "",
+                  !(state.filters.showArchived && state.filters.openSlots) ? "Archived slots hidden" : "",
+                ].filter(Boolean).join(" · ") || "No category filters"}
+              </p>
+              {searchResults.length === 0 ? (
+                <p className="px-3 py-4 text-sm text-muted" role="status">
+                  No results for ‘{searchQuery.trim()}’
+                </p>
+              ) : (
+                <div className="divide-y divide-divider">
+                  {(() => {
+                    let resultIndex = 0
+                    return groupedSearchResults.map(([date, events]) => (
+                        <div key={date} role="group" aria-label={formatDate(date, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}>
+                        <h3 className="bg-white px-3 pt-3 text-xs font-semibold text-ink">
+                          {formatDate(date, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+                        </h3>
+                          <div className="py-1">
+                          {events.map((event) => {
+                            const index = resultIndex++
+                            return (
+                                <div key={event.id}>
+                                <button
+                                  id={`calendar-search-result-${index}`}
+                                  type="button"
+                                  role="option"
+                                  aria-selected={activeSearchIndex === index}
+                                  onMouseEnter={() => setActiveSearchIndex(index)}
+                                  onClick={() => searchEventAt(index)}
+                                  className={`w-full px-3 py-2 text-left focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-primary ${
+                                    activeSearchIndex === index ? "bg-soft" : "hover:bg-page-bg"
+                                  }`}
+                                >
+                                  <span className="block break-words text-sm font-semibold text-ink">{event.title}</span>
+                                  <span className="mt-0.5 block text-xs text-muted">
+                                    {timeRange(event)} · {eventStatusLabel(event)}
+                                  </span>
+                                </button>
+                                </div>
+                            )
+                          })}
+                          </div>
+                        </div>
+                    ))
+                  })()}
+                </div>
+              )}
+            </div>
+          ) : null}
+        </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => openCreationDialog("open-slot")} className="inline-flex h-10 items-center rounded-full bg-primary px-4 text-sm font-semibold text-white hover:bg-primary/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
             Create
@@ -1531,135 +1651,6 @@ export function FacultyCalendarDemoView({
 
       <div className="mt-5 grid min-w-0 items-start gap-4 xl:grid-cols-[248px_minmax(0,1fr)]">
         <aside className="min-w-0 space-y-4">
-          <section className="rounded-2xl border border-border-card bg-white p-4 shadow-card">
-            <label htmlFor="calendar-demo-search" className="text-xs font-semibold text-ink">Search dates or events</label>
-            <div className="relative mt-2">
-              <Search size={16} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-              <input
-                ref={searchInputRef}
-                id="calendar-demo-search"
-                type="search"
-                role="combobox"
-                aria-autocomplete="list"
-                aria-expanded={searchOpen && Boolean(searchQuery.trim())}
-                aria-controls="calendar-search-results"
-                aria-activedescendant={searchOpen && searchResults.length
-                  ? `calendar-search-result-${activeSearchIndex}`
-                  : undefined}
-                placeholder="Search names, topics, rooms, dates"
-                value={searchQuery}
-                onFocus={() => {
-                  if (searchQuery.trim()) setSearchOpen(true)
-                }}
-                onChange={(event) => {
-                  setSearchQuery(event.target.value)
-                  setSearchOpen(Boolean(event.target.value.trim()))
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Escape") {
-                    if (searchOpen) {
-                      event.preventDefault()
-                      setSearchOpen(false)
-                    }
-                    return
-                  }
-                  if (event.key === "ArrowDown" && searchResults.length) {
-                    event.preventDefault()
-                    setSearchOpen(true)
-                    setActiveSearchIndex((index) => (index + 1) % searchResults.length)
-                  } else if (event.key === "ArrowUp" && searchResults.length) {
-                    event.preventDefault()
-                    setSearchOpen(true)
-                    setActiveSearchIndex((index) => (index - 1 + searchResults.length) % searchResults.length)
-                  } else if (event.key === "Enter" && searchOpen && searchResults.length) {
-                    event.preventDefault()
-                    searchEventAt(activeSearchIndex)
-                  }
-                }}
-                className="h-10 w-full rounded-lg border border-border-card bg-white pl-9 pr-10 text-sm text-ink placeholder:text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/15"
-              />
-              {searchQuery ? (
-                <button
-                  type="button"
-                  aria-label="Clear search"
-                  onClick={() => {
-                    setSearchQuery("")
-                    setSearchOpen(false)
-                    setActiveSearchIndex(0)
-                    searchInputRef.current?.focus()
-                  }}
-                  className="absolute right-2 top-1/2 inline-flex size-7 -translate-y-1/2 items-center justify-center rounded-full text-muted hover:bg-soft focus-visible:outline-2 focus-visible:outline-primary"
-                >
-                  <X size={15} />
-                </button>
-              ) : null}
-            </div>
-            {searchOpen && searchQuery.trim() ? (
-              <div
-                ref={searchResultsRef}
-                id="calendar-search-results"
-                role="listbox"
-                aria-label="Calendar search results"
-                className="mt-2 max-h-[min(55dvh,420px)] overflow-y-auto overscroll-contain rounded-xl border border-border-card bg-white shadow-card"
-              >
-                <p className="sticky top-0 z-10 border-b border-divider bg-page-bg px-3 py-2 text-xs text-muted">
-                  Search is restricted by active filters:
-                  {" "}{[
-                    !state.filters.classes ? "Classes hidden" : "",
-                    !state.filters.consultations ? "Consultations hidden" : "",
-                    !state.filters.pending ? "Pending hidden" : "",
-                    !state.filters.openSlots ? "Open slots hidden" : "",
-                    !state.filters.blockedTime ? "Blocked time hidden" : "",
-                    !(state.filters.showArchived && state.filters.openSlots) ? "Archived slots hidden" : "",
-                  ].filter(Boolean).join(" · ") || "No category filters"}
-                </p>
-                {searchResults.length === 0 ? (
-                  <p className="px-3 py-4 text-sm text-muted" role="status">
-                    No results for ‘{searchQuery.trim()}’
-                  </p>
-                ) : (
-                  <div className="divide-y divide-divider">
-                    {(() => {
-                      let resultIndex = 0
-                      return groupedSearchResults.map(([date, events]) => (
-                          <div key={date} role="group" aria-label={formatDate(date, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}>
-                          <h3 className="bg-white px-3 pt-3 text-xs font-semibold text-ink">
-                            {formatDate(date, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
-                          </h3>
-                            <div className="py-1">
-                            {events.map((event) => {
-                              const index = resultIndex++
-                              return (
-                                  <div key={event.id}>
-                                  <button
-                                    id={`calendar-search-result-${index}`}
-                                    type="button"
-                                    role="option"
-                                    aria-selected={activeSearchIndex === index}
-                                    onMouseEnter={() => setActiveSearchIndex(index)}
-                                    onClick={() => searchEventAt(index)}
-                                    className={`w-full px-3 py-2 text-left focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-primary ${
-                                      activeSearchIndex === index ? "bg-soft" : "hover:bg-page-bg"
-                                    }`}
-                                  >
-                                    <span className="block break-words text-sm font-semibold text-ink">{event.title}</span>
-                                    <span className="mt-0.5 block text-xs text-muted">
-                                      {timeRange(event)} · {eventStatusLabel(event)}
-                                    </span>
-                                  </button>
-                                  </div>
-                              )
-                            })}
-                            </div>
-                          </div>
-                      ))
-                    })()}
-                  </div>
-                )}
-              </div>
-            ) : null}
-          </section>
-
           <section className="rounded-2xl border border-border-card bg-white p-4 shadow-card" aria-label="Date picker">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-ink">{monthLabel(currentMonth)}</h2>
@@ -1731,6 +1722,25 @@ export function FacultyCalendarDemoView({
                 <div key={label} className="rounded-lg bg-page-bg px-2.5 py-2">
                   <dt className="text-xs text-muted">{label}</dt>
                   <dd className="mt-0.5 text-sm font-semibold tabular-nums text-ink">{count}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+
+          <section className="rounded-2xl border border-border-card bg-white p-4 shadow-card">
+            <h2 className="text-sm font-semibold text-ink">Day summary</h2>
+            <dl className="mt-3 grid grid-cols-2 gap-2">
+              {[
+                ["Classes", selectedDaySummary.classes],
+                ["Consultations", selectedDaySummary.consultations],
+                ["Pending requests", selectedDaySummary.pendingRequests],
+                ["Total appointments", selectedDaySummary.totalAppointments],
+                ["Available time", formatDuration(selectedDaySummary.availableMinutes)],
+                ["Conflict status", selectedDaySummary.conflicts ? `${selectedDaySummary.conflicts} ${selectedDaySummary.conflicts === 1 ? "conflict" : "conflicts"}` : "No conflicts"],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-lg bg-page-bg px-2.5 py-2">
+                  <dt className="text-xs text-muted">{label}</dt>
+                  <dd className="mt-0.5 text-sm font-semibold tabular-nums text-ink">{value}</dd>
                 </div>
               ))}
             </dl>
@@ -2044,48 +2054,6 @@ export function FacultyCalendarDemoView({
               </div>
             )}
           </section>
-
-          <div className="mt-4 grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(240px,0.8fr)]">
-            <section className="min-w-0 rounded-2xl border border-border-card bg-white p-4 shadow-card">
-              <h2 className="text-sm font-semibold text-ink">Day summary</h2>
-              <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {[
-                  ["Classes", selectedDaySummary.classes],
-                  ["Consultations", selectedDaySummary.consultations],
-                  ["Pending requests", selectedDaySummary.pendingRequests],
-                  ["Total appointments", selectedDaySummary.totalAppointments],
-                  ["Available time", formatDuration(selectedDaySummary.availableMinutes)],
-                  ["Conflict status", selectedDaySummary.conflicts ? `${selectedDaySummary.conflicts} ${selectedDaySummary.conflicts === 1 ? "conflict" : "conflicts"}` : "No conflicts"],
-                ].map(([label, value]) => (
-                  <div key={label} className="rounded-lg bg-page-bg px-3 py-2">
-                    <dt className="text-xs text-muted">{label}</dt>
-                    <dd className="mt-1 text-sm font-semibold tabular-nums text-ink">{value}</dd>
-                  </div>
-                ))}
-              </dl>
-            </section>
-            <section className="rounded-2xl border border-border-card bg-white p-4 shadow-card">
-              <h2 className="text-sm font-semibold text-ink">Quick actions</h2>
-              <div className="mt-3 grid gap-2">
-                {([
-                  ["copy-day", "Copy this day to…"],
-                  ["block-day", "Block whole day"],
-                  ["add-class-hours", "Create class schedule"],
-                ] as const).map(([action, label]) => (
-                  <button
-                    key={action}
-                    type="button"
-                    onClick={() => action === "add-class-hours"
-                      ? openCreationDialog("class")
-                      : requestDayAction(action)}
-                    className="inline-flex min-h-10 w-full items-center justify-center rounded-full border border-border px-3 text-sm font-semibold text-primary transition hover:bg-soft focus-visible:outline-2 focus-visible:outline-primary"
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </section>
-          </div>
 
         </main>
       </div>

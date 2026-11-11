@@ -304,6 +304,14 @@ export function FacultyPortal({
     { label: "Notifications", icon: Bell, badge: notifications.unreadCount ?? undefined },
   ]
 
+  const pageHeaders: Record<string, { title: string; description?: string }> = {
+    "Appointments": { title: "Appointments", description: "Review, respond to, and manage your consultation requests." },
+    "Calendar & Availability": { title: "Calendar & Availability" },
+    "Consultation Records": { title: "Consultation History & Records" },
+    "Student Records": { title: "Consultation History & Records" },
+    "Notifications": { title: "Notifications" },
+  }
+
   const banner = (
     <div className="flex w-full flex-col gap-3 rounded-[16px] border border-border bg-soft p-5 md:flex-row md:items-center md:justify-between">
       {nextUp ? (
@@ -375,10 +383,7 @@ export function FacultyPortal({
         void dispatchCalendarAction({ type: "set-accepting-requests", value })
       }
       showDashboardContent={!drilldown && (view === "Dashboard" || view === "Today's Schedule")}
-      pageHeader={!drilldown && view === "Appointments" ? {
-        title: "Appointments",
-        description: "Review, respond to, and manage your consultation requests.",
-      } : undefined}
+      pageHeader={!drilldown ? pageHeaders[view] : undefined}
       name={name}
       detail={detail}
       navItems={nav}
@@ -401,7 +406,10 @@ export function FacultyPortal({
         </>
       )}
       {!drilldown && (view === "Dashboard" || view === "Today's Schedule") && (
-        <FacultyTodayView onViewAppointments={() => { setView("Appointments"); setDrilldown(null) }} />
+        <FacultyTodayView
+          onViewAppointments={() => { setView("Appointments"); setDrilldown(null) }}
+          onOpenNotifications={() => { setView("Notifications"); setDrilldown(null) }}
+        />
       )}
       {!drilldown && view === "Appointments" && (
         <FacultyAppointmentsView

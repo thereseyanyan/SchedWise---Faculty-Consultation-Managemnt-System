@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState, type FormEvent, type ReactNode } from "react"
+import { useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react"
 import { AlertTriangle, Check, Eye, LockKeyhole, X } from "lucide-react"
 import {
   ApiError,
@@ -14,6 +14,7 @@ import {
   InputTag,
   SelectTag,
   departmentIds,
+  emailPattern,
   errorMessage,
   fullName,
   isStrongPassword,
@@ -58,6 +59,10 @@ export function AccountSettingsDialog({
   const [passwordError, setPasswordError] = useState("")
   const [passwordFields, setPasswordFields] = useState<Record<string, string>>({})
   const [passwordMessage, setPasswordMessage] = useState("")
+  const [activeDialog, setActiveDialog] = useState<"email" | "password" | "delete" | null>(null)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [avatarError, setAvatarError] = useState("")
+  const avatarInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!open || !user) return
@@ -78,21 +83,34 @@ export function AccountSettingsDialog({
     setPasswordError("")
     setPasswordMessage("")
     setSection("profile")
+    setActiveDialog(null)
+    setAvatarUrl(null)
+    setAvatarError("")
   }, [open, user?.id])
 
   useEffect(() => {
     if (!open) return
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose()
+      if (event.key === "Escape") {
+        if (activeDialog) setActiveDialog(null)
+        else onClose()
+      }
     }
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
-  }, [open, onClose])
+  }, [open, onClose, activeDialog])
+
+  useEffect(
+    () => () => {
+      if (avatarUrl) URL.revokeObjectURL(avatarUrl)
+    },
+    [avatarUrl],
+  )
 
   if (!open || !user) return null
 
   if (preview) {
-    return <AccountSettingsDialogPreview />
+    return <AccountSettingsDialogPreview user={user} />
   }
 
   const role = roleFromId(user.role_id) ?? user.role_id
@@ -180,6 +198,25 @@ export function AccountSettingsDialog({
     }
   }
 
+  const handleAvatarSelected = (file: File | undefined | null) => {
+    setAvatarError("")
+    if (!file) return
+    if (!["image/png", "image/jpeg"].includes(file.type)) {
+      setAvatarError("Choose a PNG or JPEG image.")
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setAvatarError("Images must be smaller than 5 MB.")
+      return
+    }
+    setAvatarUrl(URL.createObjectURL(file))
+  }
+
+  const removeAvatar = () => {
+    setAvatarUrl(null)
+    setAvatarError("")
+  }
+
   if (facultyVariant && section === "profile") {
     const facultyId = user.faculty_number || user.id
     const roleLabel = roleFromId(user.role_id) ?? user.role_id
@@ -195,7 +232,7 @@ export function AccountSettingsDialog({
           <div className="flex items-start justify-between gap-4 px-5 pb-4 pt-6 sm:px-8">
             <div>
               <h1 className="font-display text-2xl font-bold text-ink">Account settings</h1>
-              <p className="mt-1 text-xs text-muted">Manage your profile, password, and privacy in one place.</p>
+              <p className="mt-1 text-xs text-muted">Manage your profile and password in one place.</p>
             </div>
             <Button
               onClick={onClose}
@@ -210,13 +247,41 @@ export function AccountSettingsDialog({
           <form onSubmit={saveProfile} className="space-y-3 px-5 pb-5 sm:px-8 sm:pb-8">
             <section className="rounded-card border border-border-card bg-card p-4 shadow-card sm:p-5">
               <div className="flex flex-wrap items-center gap-3">
-                <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-soft text-sm font-semibold text-primary">
-                  {initials}
+                <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-soft text-sm font-semibold text-primary">
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt="Profile photo preview" className="size-full object-cover" />
+                  ) : (
+                    initials
+                  )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Button className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white">Upload image</Button>
-                  <Button className="rounded-lg border border-border px-3 py-2 text-xs font-semibold text-primary">Remove</Button>
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg"
+                    className="hidden"
+                    onChange={(event) => {
+                      handleAvatarSelected(event.target.files?.[0])
+                      event.target.value = ""
+                    }}
+                  />
+                  <Button
+                    onClick={() => avatarInputRef.current?.click()}
+                    className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white"
+                  >
+                    Upload image
+                  </Button>
+                  <Button
+                    onClick={removeAvatar}
+                    disabled={!avatarUrl}
+                    className="rounded-lg border border-border px-3 py-2 text-xs font-semibold text-primary"
+                  >
+                    Remove
+                  </Button>
                   <p className="basis-full text-[12px] text-muted">PNG or JPEG, under 5 MB</p>
+                  {avatarError ? (
+                    <p role="alert" className="basis-full text-[12px] font-medium text-schedwise-danger">{avatarError}</p>
+                  ) : null}
                 </div>
               </div>
             </section>
@@ -287,7 +352,7 @@ export function AccountSettingsDialog({
               <span className={pillLabel}>Email</span>
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 <InputTag value={user.email} readOnly className={`${pillField} min-w-0 flex-1 bg-soft`} />
-                <Button className="rounded-lg border border-border px-3 py-2 text-xs font-semibold text-primary">Edit email</Button>
+                <Button onClick={() => setActiveDialog("email")} className="rounded-lg border border-border px-3 py-2 text-xs font-semibold text-primary">Edit email</Button>
                 <span className="rounded-full bg-green-tint px-2.5 py-1 text-[12px] font-semibold text-green">✓ Verified</span>
               </div>
               <p className="mt-1 text-[12px] text-muted">Used to log in and receive notifications.</p>
@@ -305,7 +370,7 @@ export function AccountSettingsDialog({
                   <span className={pillLabel}>Password</span>
                   <div className="mt-1 flex flex-wrap items-center gap-2">
                     <div className={`${pillField} flex min-w-0 flex-1 items-center bg-card text-muted`}>••••••••••••</div>
-                    <Button onClick={() => setSection("password")} className="rounded-lg border border-border px-3 py-2 text-xs font-semibold text-primary">Change password</Button>
+                    <Button onClick={() => setActiveDialog("password")} className="rounded-lg border border-border px-3 py-2 text-xs font-semibold text-primary">Change password</Button>
                   </div>
                   <p className="mt-1 text-[12px] text-muted">Use a strong password that you do not use on other sites.</p>
                 </div>
@@ -314,7 +379,7 @@ export function AccountSettingsDialog({
                     <p className="text-xs font-semibold text-ink">Delete account</p>
                     <p className="mt-1 text-[12px] text-muted">Permanently remove your account and hide your profile from students.</p>
                   </div>
-                  <Button className="rounded-lg border border-border px-3 py-2 text-xs font-semibold text-primary">Delete account</Button>
+                  <Button onClick={() => setActiveDialog("delete")} className="rounded-lg border border-border px-3 py-2 text-xs font-semibold text-primary">Delete account</Button>
                 </div>
               </div>
             </section>
@@ -329,6 +394,22 @@ export function AccountSettingsDialog({
               </div>
             </div>
           </form>
+          {activeDialog === "email" ? (
+            <EditEmailDialog currentEmail={user.email} onClose={() => setActiveDialog(null)} />
+          ) : null}
+          {activeDialog === "password" ? (
+            <ChangePasswordDialog email={user.email} onClose={() => setActiveDialog(null)} />
+          ) : null}
+          {activeDialog === "delete" ? (
+            <DeleteAccountDialog
+              userId={user.id}
+              onClose={() => setActiveDialog(null)}
+              onReviewAppointments={() => {
+                setActiveDialog(null)
+                onClose()
+              }}
+            />
+          ) : null}
         </div>
       </div>
     )
@@ -597,138 +678,509 @@ export function AccountSettingsDialog({
   )
 }
 
-function AccountSettingsDialogPreview() {
+function AccountSettingsDialogPreview({ user }: { user: User }) {
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-page-bg p-4 sm:p-6 lg:p-8">
       <div className="mx-auto grid min-h-full max-w-[1112px] items-start gap-6 xl:grid-cols-[minmax(0,352px)_minmax(0,352px)_minmax(0,352px)]">
-        <PreviewEmailDialog />
-        <PreviewPasswordDialog />
-        <PreviewDeleteDialog />
+        <EditEmailDialog embedded currentEmail={user.email} onClose={() => {}} />
+        <ChangePasswordDialog embedded email={user.email} onClose={() => {}} />
+        <DeleteAccountDialog embedded userId={user.id} onClose={() => {}} onReviewAppointments={() => {}} />
       </div>
     </div>
   )
 }
 
-function PreviewDialogShell({
+function DialogSurface({
+  embedded,
+  onClose,
   title,
   description,
-  children,
   danger = false,
-  className = "",
+  children,
 }: {
+  embedded: boolean
+  onClose: () => void
   title: string
   description: string
-  children: ReactNode
   danger?: boolean
-  className?: string
+  children: ReactNode
 }) {
-  return (
-    <section
-      role="dialog"
-      aria-label={title}
-      className={`rounded-card border bg-card p-3 shadow-card sm:p-4 ${danger ? "border-schedwise-danger" : "border-border-card"} ${className}`}
-    >
-      <h2 className={`font-display text-[14px] font-bold ${danger ? "text-schedwise-danger" : "text-ink"}`}>{title}</h2>
-      <p className="mt-1 text-[12px] leading-4 text-muted">{description}</p>
+  const body = (
+    <div className="min-w-0">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className={`font-display text-[14px] font-bold ${danger ? "text-schedwise-danger" : "text-ink"}`}>{title}</h2>
+          <p className="mt-1 text-[12px] leading-4 text-muted">{description}</p>
+        </div>
+        {embedded ? null : (
+          <Button
+            onClick={onClose}
+            aria-label={`Close ${title.toLowerCase()}`}
+            title={`Close ${title.toLowerCase()}`}
+            className="size-8 shrink-0 rounded-lg text-muted hover:bg-soft hover:text-ink"
+          >
+            <X size={16} />
+          </Button>
+        )}
+      </div>
       {children}
-    </section>
+    </div>
+  )
+
+  if (embedded) {
+    return (
+      <section
+        role="dialog"
+        aria-label={title}
+        className={`rounded-card border bg-card p-4 shadow-card ${danger ? "border-schedwise-danger" : "border-border-card"}`}
+      >
+        {body}
+      </section>
+    )
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-ink/35 p-0 sm:items-center sm:p-6"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose()
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className={`max-h-[92vh] w-full max-w-md overflow-y-auto rounded-t-card border bg-card p-4 shadow-card sm:rounded-card ${danger ? "border-schedwise-danger" : "border-border-card"}`}
+      >
+        {body}
+      </div>
+    </div>
   )
 }
 
-function PreviewField({
+function DialogField({
   label,
   value,
+  onChange,
   type = "text",
+  placeholder,
+  autoComplete,
+  error,
   eye = false,
-  placeholder = false,
 }: {
   label: string
   value: string
+  onChange: (value: string) => void
   type?: "text" | "password"
+  placeholder?: string
+  autoComplete?: string
+  error?: string
   eye?: boolean
-  placeholder?: boolean
 }) {
+  const [visible, setVisible] = useState(false)
   return (
-    <label className="mt-3 block text-xs font-medium text-ink">
+    <label className="block text-xs font-medium text-ink">
       <span>{label}</span>
       <span className="relative mt-1 block">
-        <input
-          aria-label={label}
-          readOnly
-          type={type}
+        <InputTag
+          type={eye ? (visible ? "text" : "password") : type}
           value={value}
-          placeholder={placeholder ? value : undefined}
-          className="h-7 w-full rounded-lg border border-border bg-card px-3 text-xs text-muted outline-none"
+          placeholder={placeholder}
+          autoComplete={autoComplete}
+          aria-invalid={!!error}
+          onChange={(event) => onChange(event.target.value)}
+          className={`h-9 w-full rounded-lg border bg-card px-3 text-xs text-ink outline-none transition placeholder:text-muted focus:border-primary ${error ? "border-schedwise-danger" : "border-border"} ${eye ? "pr-9" : ""}`}
         />
-        {eye ? <Eye aria-hidden="true" className="absolute right-3 top-2.5 text-muted" size={14} /> : null}
+        {eye ? (
+          <Button
+            type="button"
+            aria-label={visible ? "Hide password" : "Show password"}
+            title={visible ? "Hide password" : "Show password"}
+            onClick={() => setVisible((current) => !current)}
+            className="absolute right-1.5 top-1/2 size-7 -translate-y-1/2 rounded-md text-muted hover:text-ink"
+          >
+            <Eye size={14} />
+          </Button>
+        ) : null}
       </span>
+      <FieldError message={error} />
     </label>
   )
 }
 
-function PreviewEmailDialog() {
+function EditEmailDialog({
+  embedded = false,
+  currentEmail,
+  onClose,
+}: {
+  embedded?: boolean
+  currentEmail: string
+  onClose: () => void
+}) {
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [fields, setFields] = useState<Record<string, string>>({})
+  const [pendingEmail, setPendingEmail] = useState("")
+
+  const reset = () => {
+    setEmail("")
+    setPassword("")
+    setFields({})
+    setPendingEmail("")
+  }
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault()
+    const nextEmail = email.trim()
+    const nextFields: Record<string, string> = {}
+    if (!emailPattern.test(nextEmail)) {
+      nextFields.email = "Enter a valid email address."
+    } else if (nextEmail.toLowerCase() === currentEmail.toLowerCase()) {
+      nextFields.email = "This is already your email address."
+    }
+    if (!password) {
+      nextFields.password = "Enter your current password."
+    }
+    setFields(nextFields)
+    if (Object.keys(nextFields).length > 0) return
+    setPendingEmail(nextEmail)
+    setEmail("")
+    setPassword("")
+  }
+
   return (
-    <PreviewDialogShell className="min-h-[216px]" title="Update email address" description="Your login email changes after you verify the new address.">
-      <PreviewField label="New email address *" value="name@university.edu" placeholder />
-      <PreviewField label="Current password *" value="••••••••••" type="password" />
-      <p className="mt-1 text-[12px] leading-4 text-muted">We'll send a verification link. Your email stays unchanged until verified.</p>
-      <div className="mt-3 flex items-center justify-between gap-3">
-        <span className="rounded-full bg-amber-tint px-2.5 py-1 text-[12px] font-semibold text-amber">Pending verification</span>
-        <div className="flex gap-2">
-          <Button className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-primary">Cancel</Button>
-          <Button className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white">Send link</Button>
+    <DialogSurface
+      embedded={embedded}
+      onClose={onClose}
+      title="Update email address"
+      description="Your login email changes after you verify the new address."
+    >
+      <form onSubmit={submit} className="mt-1">
+        <DialogField
+          label="New email address *"
+          value={email}
+          placeholder="name@university.edu"
+          autoComplete="email"
+          error={fields.email}
+          onChange={(value) => {
+            setEmail(value)
+            setFields((current) => ({ ...current, email: "" }))
+          }}
+        />
+        <DialogField
+          label="Current password *"
+          value={password}
+          type="password"
+          autoComplete="current-password"
+          error={fields.password}
+          onChange={(value) => {
+            setPassword(value)
+            setFields((current) => ({ ...current, password: "" }))
+          }}
+        />
+        <p className="mt-1 text-[12px] leading-4 text-muted">We'll send a verification link. Your email stays unchanged until verified.</p>
+        {pendingEmail ? (
+          <p className="mt-2 rounded-lg bg-amber-tint px-3 py-2 text-[12px] leading-4 text-ink">
+            <span className="font-semibold">Pending verification for {pendingEmail}.</span>{" "}
+            Sign-in and notifications still use {currentEmail} until the new address is verified.
+          </p>
+        ) : null}
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+          {pendingEmail ? (
+            <span className="rounded-full bg-amber-tint px-2.5 py-1 text-[12px] font-semibold text-amber">Pending verification</span>
+          ) : (
+            <span />
+          )}
+          <div className="flex gap-2">
+            <Button type="button" onClick={() => { reset(); onClose() }} className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-primary">Cancel</Button>
+            <Button type="submit" className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white">{pendingEmail ? "Resend link" : "Send link"}</Button>
+          </div>
         </div>
-      </div>
-    </PreviewDialogShell>
+      </form>
+    </DialogSurface>
   )
 }
 
-function PreviewPasswordDialog() {
+function ChangePasswordDialog({
+  embedded = false,
+  email,
+  onClose,
+}: {
+  embedded?: boolean
+  email: string
+  onClose: () => void
+}) {
+  const [passwords, setPasswords] = useState({ current: "", next: "", confirm: "" })
+  const [fields, setFields] = useState<Record<string, string>>({})
+  const [error, setError] = useState("")
+  const [message, setMessage] = useState("")
+  const [busy, setBusy] = useState(false)
+
+  const requirements = [
+    { label: "At least 8 characters", met: passwords.next.length >= 8 },
+    { label: "One uppercase letter", met: /[A-Z]/.test(passwords.next) },
+    { label: "One lowercase letter", met: /[a-z]/.test(passwords.next) },
+    { label: "One number", met: /[0-9]/.test(passwords.next) },
+    { label: "One symbol", met: /[\W_]/.test(passwords.next) },
+  ]
+  const metCount = requirements.filter((requirement) => requirement.met).length
+  const strengthLabel = passwords.next
+    ? metCount <= 2 ? "Weak" : metCount === 3 ? "Fair" : metCount === 4 ? "Good" : "Strong"
+    : ""
+  const strengthBarColor = metCount <= 2 ? "bg-schedwise-danger" : metCount === 3 ? "bg-amber" : "bg-green"
+  const strengthTextColor = metCount <= 2 ? "text-schedwise-danger" : metCount === 3 ? "text-amber" : "text-green"
+
+  const reset = () => {
+    setPasswords({ current: "", next: "", confirm: "" })
+    setFields({})
+    setError("")
+    setMessage("")
+  }
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    setFields({})
+    setError("")
+    setMessage("")
+
+    if (!passwords.current) {
+      setFields({ current: "Enter your current password." })
+      return
+    }
+    if (!isStrongPassword(passwords.next)) {
+      setFields({ next: passwordPolicyMessage })
+      return
+    }
+    if (passwords.next !== passwords.confirm) {
+      setFields({ confirm: "The new passwords do not match." })
+      return
+    }
+
+    if (!await confirmAction("Change your password? Other signed-in sessions will be invalidated.")) return
+    setBusy(true)
+    try {
+      const result = await authApi.changePassword({
+        current_password: passwords.current,
+        new_password: passwords.next,
+      })
+      setPasswords({ current: "", next: "", confirm: "" })
+      setMessage(result.message)
+    } catch (err) {
+      if (err instanceof ApiError && (err.fields.current_password || err.fields.new_password)) {
+        setFields({ current: err.fields.current_password || "", next: err.fields.new_password || "" })
+      } else {
+        setError(errorMessage(err, "Unable to change your password."))
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const sendResetLink = async () => {
+    if (busy) return
+    if (!await confirmAction(`Send a password reset link to ${email}?`)) return
+    setBusy(true)
+    try {
+      const result = await authApi.forgotPassword(email)
+      setMessage(result.message)
+    } catch (err) {
+      setError(errorMessage(err, "Unable to send a password reset link."))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
-    <PreviewDialogShell className="min-h-[428px]" title="Change password" description="Use a strong password that you do not use on other sites.">
-      <PreviewField label="Current password *" value="••••••••••" type="password" eye />
-      <span className="mt-1 block text-xs font-medium text-primary underline">Forgot your current password?</span>
-      <PreviewField label="New password *" value="••••••••••" type="password" eye />
-      <div className="mt-2">
-        <div className="flex items-center justify-between text-xs text-muted"><span>Password strength</span><span className="text-amber">Fair</span></div>
-        <div className="mt-1 h-1 rounded-full bg-divider"><div className="h-1 w-2/3 rounded-full bg-amber" /></div>
-      </div>
-      <div className="mt-3">
-        <p className="text-xs font-semibold text-ink">Password requirements</p>
-        <ul className="mt-1 space-y-1 text-xs text-muted">
-          <li className="flex gap-1.5 text-green"><Check size={13} />At least 12 characters</li>
-          <li className="flex gap-1.5 text-green"><Check size={13} />One uppercase letter</li>
-          <li className="flex gap-1.5 text-green"><Check size={13} />One lowercase letter</li>
-          <li>○ One number</li>
-          <li>○ One symbol</li>
-        </ul>
-      </div>
-      <PreviewField label="Confirm new password *" value="••••••••••" type="password" eye />
-      <div className="mt-4 flex justify-start gap-2">
-        <Button className="rounded-full border border-border px-4 py-2 text-xs font-semibold text-primary">Cancel</Button>
-        <Button className="rounded-full bg-primary px-4 py-2 text-xs font-semibold text-white">Update password</Button>
-      </div>
-    </PreviewDialogShell>
+    <DialogSurface
+      embedded={embedded}
+      onClose={onClose}
+      title="Change password"
+      description="Use a strong password that you do not use on other sites."
+    >
+      <form onSubmit={submit} className="mt-1">
+        <DialogField
+          label="Current password *"
+          value={passwords.current}
+          type="password"
+          eye
+          autoComplete="current-password"
+          error={fields.current}
+          onChange={(value) => {
+            setPasswords((current) => ({ ...current, current: value }))
+            setFields((current) => ({ ...current, current: "" }))
+          }}
+        />
+        <Button
+          type="button"
+          onClick={sendResetLink}
+          className="mt-1.5 text-xs font-medium text-primary underline underline-offset-2 hover:text-primary/80"
+        >
+          Forgot your current password?
+        </Button>
+        <DialogField
+          label="New password *"
+          value={passwords.next}
+          type="password"
+          eye
+          autoComplete="new-password"
+          error={fields.next}
+          onChange={(value) => {
+            setPasswords((current) => ({ ...current, next: value }))
+            setFields((current) => ({ ...current, next: "" }))
+          }}
+        />
+        <div className="mt-2">
+          <div className="flex items-center justify-between text-xs text-muted">
+            <span>Password strength</span>
+            <span className={strengthTextColor}>{strengthLabel || "—"}</span>
+          </div>
+          <div className="mt-1 h-1 rounded-full bg-divider">
+            <div
+              className={`h-1 rounded-full transition-all ${strengthBarColor}`}
+              style={{ width: `${(metCount / 5) * 100}%` }}
+            />
+          </div>
+        </div>
+        <div className="mt-3">
+          <p className="text-xs font-semibold text-ink">Password requirements</p>
+          <ul className="mt-1 space-y-1 text-xs text-muted">
+            {requirements.map((requirement) => (
+              <li key={requirement.label} className={`flex items-center gap-1.5 ${requirement.met ? "text-green" : ""}`}>
+                {requirement.met ? (
+                  <Check aria-hidden="true" size={13} />
+                ) : (
+                  <span aria-hidden="true">○</span>
+                )}
+                {requirement.label}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <DialogField
+          label="Confirm new password *"
+          value={passwords.confirm}
+          type="password"
+          eye
+          autoComplete="new-password"
+          error={fields.confirm}
+          onChange={(value) => {
+            setPasswords((current) => ({ ...current, confirm: value }))
+            setFields((current) => ({ ...current, confirm: "" }))
+          }}
+        />
+        {error ? (
+          <p className="mt-2 rounded-lg bg-schedwise-danger/10 px-3 py-2 text-xs text-schedwise-danger">{error}</p>
+        ) : null}
+        {message ? (
+          <p className="mt-2 rounded-lg bg-green-tint px-3 py-2 text-xs text-green">{message}</p>
+        ) : null}
+        <div className="mt-4 flex flex-wrap justify-start gap-2">
+          <Button type="button" onClick={() => { reset(); onClose() }} className="rounded-full border border-border px-4 py-2 text-xs font-semibold text-primary">Cancel</Button>
+          <Button type="submit" disabled={busy} className="rounded-full bg-primary px-4 py-2 text-xs font-semibold text-white">{busy ? "Updating…" : "Update password"}</Button>
+        </div>
+      </form>
+    </DialogSurface>
   )
 }
 
-function PreviewDeleteDialog() {
+function DeleteAccountDialog({
+  embedded = false,
+  userId,
+  onClose,
+  onReviewAppointments,
+}: {
+  embedded?: boolean
+  userId: string
+  onClose: () => void
+  onReviewAppointments: () => void
+}) {
+  const [password, setPassword] = useState("")
+  const [confirmText, setConfirmText] = useState("")
+  const [error, setError] = useState("")
+  const [busy, setBusy] = useState(false)
+  const ready = password !== "" && confirmText === "DELETE"
+
+  const reset = () => {
+    setPassword("")
+    setConfirmText("")
+    setError("")
+  }
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!ready || busy) return
+    if (!await confirmAction("Permanently delete your account? This cannot be undone.")) return
+    setBusy(true)
+    try {
+      await usersApi.delete(userId)
+      try {
+        await authApi.logout()
+      } catch (err) {
+        console.error("Logout request failed.", err)
+      }
+      window.dispatchEvent(new Event("schedwise:session-expired"))
+      onClose()
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 403) {
+        setError("Self-service account deletion is not enabled on the server yet. Ask an administrator to remove this account.")
+      } else {
+        setError(errorMessage(err, "Unable to delete your account."))
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
-    <PreviewDialogShell className="min-h-[214px]" title="Delete account" description="You will lose access. Appointment and audit history is retained for university records." danger>
-      <div className="mt-4 flex gap-2 rounded-lg bg-schedwise-danger/10 p-3 text-xs leading-5 text-schedwise-danger">
-        <AlertTriangle aria-hidden="true" className="mt-0.5 shrink-0" size={14} />
-        <span>Upcoming confirmed consultations must be cancelled first.</span>
-      </div>
-      <span className="mt-3 block text-xs font-medium text-primary underline">Review appointments →</span>
-      <p className="mt-4 text-xs font-medium text-ink">Type "DELETE" and enter your password</p>
-      <div className="mt-1 grid grid-cols-2 gap-2">
-        <PreviewField label="Password" value="••••••••" type="password" />
-        <PreviewField label="" value="Type DELETE" placeholder />
-      </div>
-      <div className="mt-4 flex justify-end gap-2">
-        <Button className="rounded-lg border border-border px-3 py-2 text-xs font-semibold text-primary">Cancel</Button>
-        <Button className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white">Delete account</Button>
-      </div>
-    </PreviewDialogShell>
+    <DialogSurface
+      embedded={embedded}
+      onClose={onClose}
+      danger
+      title="Delete account"
+      description="You will lose access. Appointment and audit history is retained for university records."
+    >
+      <form onSubmit={submit} className="mt-1">
+        <div className="mt-3 flex gap-2 rounded-lg bg-schedwise-danger/10 p-3 text-xs leading-5 text-schedwise-danger">
+          <AlertTriangle aria-hidden="true" className="mt-0.5 shrink-0" size={14} />
+          <span>Upcoming confirmed consultations must be cancelled first.</span>
+        </div>
+        <Button
+          type="button"
+          onClick={() => { reset(); onReviewAppointments() }}
+          className="mt-3 text-xs font-medium text-primary underline underline-offset-2 hover:text-primary/80"
+        >
+          Review appointments →
+        </Button>
+        <p className="mt-4 text-xs font-medium text-ink">Type "DELETE" and enter your password</p>
+        <div className="mt-1 grid grid-cols-2 gap-2">
+          <DialogField
+            label="Password"
+            value={password}
+            type="password"
+            autoComplete="current-password"
+            onChange={(value) => {
+              setPassword(value)
+              setError("")
+            }}
+          />
+          <DialogField
+            label="Confirmation"
+            value={confirmText}
+            placeholder="Type DELETE"
+            onChange={(value) => {
+              setConfirmText(value)
+              setError("")
+            }}
+          />
+        </div>
+        {error ? (
+          <p className="mt-2 rounded-lg bg-schedwise-danger/10 px-3 py-2 text-xs text-schedwise-danger">{error}</p>
+        ) : null}
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
+          <Button type="button" onClick={() => { reset(); onClose() }} className="rounded-lg border border-border px-3 py-2 text-xs font-semibold text-primary">Cancel</Button>
+          <Button type="submit" disabled={!ready || busy} className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white">{busy ? "Deleting…" : "Delete account"}</Button>
+        </div>
+      </form>
+    </DialogSurface>
   )
 }

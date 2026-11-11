@@ -84,7 +84,7 @@ export function FacultyPortalShell({
   acceptingRequests?: boolean
   onAcceptingRequestsChange?: (accepting: boolean) => void
   showDashboardContent?: boolean
-  pageHeader?: { title: string; description: string }
+  pageHeader?: { title: string; description?: string }
   children: ReactNode
 }) {
   const isPage = Boolean(pageHeader)
@@ -265,7 +265,7 @@ export function FacultyPortalShell({
         }`}
       >
         <div className="flex h-[88px] items-center px-6">
-          <BrandLogo className="text-ink" />
+          <BrandLogo className="text-ink" showMark />
           <button
             type="button"
             aria-label="Close navigation"
@@ -278,7 +278,8 @@ export function FacultyPortalShell({
             <X size={18} />
           </button>
         </div>
-        <nav className="flex flex-1 flex-col gap-1 px-3">
+        <div className="mx-6 border-t border-border" aria-hidden="true" />
+        <nav className="flex flex-1 flex-col gap-1 px-3 pt-3">
           {navItems.map(({ label, icon: IconComponent, badge }) => {
             const isActive = active === label
             return (
@@ -407,7 +408,9 @@ export function FacultyPortalShell({
                   <h1 className="font-[var(--font-display)] text-[28px] font-semibold leading-[36px] text-ink">
                     {pageHeader.title}
                   </h1>
-                  <p className="mt-1 text-sm font-medium text-muted">{pageHeader.description}</p>
+                  {pageHeader.description ? (
+                    <p className="mt-1 text-sm font-medium text-muted">{pageHeader.description}</p>
+                  ) : null}
                 </>
               ) : (
                 <>

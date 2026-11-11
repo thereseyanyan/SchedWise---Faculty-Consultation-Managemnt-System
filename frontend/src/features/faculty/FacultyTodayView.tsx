@@ -133,8 +133,10 @@ function formatDateLabel(dateStr: string) {
 
 export function FacultyTodayView({
   onViewAppointments,
+  onOpenNotifications,
 }: {
   onViewAppointments?: () => void
+  onOpenNotifications?: () => void
 }) {
   const currentUser = useContext(CurrentUserContext)
   const userId = currentUser?.id ?? ""
@@ -483,7 +485,7 @@ export function FacultyTodayView({
           />
         </div>
         <div className="min-w-0 lg:col-span-4 [&>section]:mt-0 [&>section]:h-full">
-          <RecentNotificationsCard />
+          <RecentNotificationsCard onOpenNotifications={onOpenNotifications} />
         </div>
       </div>
       <div className="mt-4 min-w-0">

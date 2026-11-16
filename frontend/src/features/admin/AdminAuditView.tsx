@@ -125,9 +125,7 @@ export function AdminAuditView() {
   return (
     <div>
       <PageTitle
-        eyebrow="Security"
         title="Audit Log"
-        description="Review authentication, account, appointment, and configuration events. Entries are read-only."
         action={
           <Button
             onClick={() => setReloadKey((value) => value + 1)}

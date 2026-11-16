@@ -99,7 +99,6 @@ export function FacultyPortalShell({
   const lastName = getLastNameOrFull(name)
   const greetingName = lastName ? `Prof. ${lastName}` : profileName
   const [dateChip, setDateChip] = useState(getDateChip)
-  const subtitle = detail && detail.trim() ? detail.trim() : null
   const [search, setSearch] = useState("")
   const [searchOpen, setSearchOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
@@ -417,7 +416,6 @@ export function FacultyPortalShell({
                   <h1 className="font-[var(--font-display)] text-[28px] font-semibold leading-[36px] text-ink">
                     {getGreeting()}, {greetingName}
                   </h1>
-                  {subtitle ? <p className="mt-1 text-sm font-medium text-muted">{subtitle}</p> : null}
                 </>
               )}
             </div>
@@ -581,7 +579,7 @@ export function FacultyPortalShell({
         <main className="mx-auto w-full max-w-[1600px] px-4 pb-8 pt-5 sm:px-6 sm:pt-6">
           {!isPage && showDashboardContent && banner ? <div className="mt-0">{banner}</div> : null}
           {!isPage && showDashboardContent ? <div className="mt-4 grid grid-cols-1 gap-4 min-[480px]:grid-cols-2 lg:grid-cols-4">
-            {stats.map(({ label, value, hint, icon: IconComponent, onClick, attention }) => {
+            {stats.map(({ label, value, icon: IconComponent, onClick, attention }) => {
               const interactive = typeof onClick === "function"
               const cardBody = (
                 <div className="flex h-full flex-col gap-2">
@@ -592,7 +590,6 @@ export function FacultyPortalShell({
                     {label}
                   </p>
                   <p className="font-[var(--font-display)] text-[36px] leading-[40px] font-bold text-ink">{value}</p>
-                  <p className="min-h-[20px] break-words text-sm text-muted">{hint}</p>
                 </div>
               )
               if (interactive) {

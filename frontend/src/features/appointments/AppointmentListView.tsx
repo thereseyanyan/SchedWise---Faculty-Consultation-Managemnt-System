@@ -126,9 +126,7 @@ export function AppointmentListView({ filter = "Total" }: { filter?: string }) {
 
   return <div>
     <PageTitle
-      eyebrow="Appointments"
       title={isStudent && filter === "Total" ? "My Appointments" : `${filter} Appointments`}
-      description="View appointment dates, participants, and status."
     />
     {error && <p role="alert" className="mt-4 text-rose-700">{error}</p>}
     {actionNotice && (

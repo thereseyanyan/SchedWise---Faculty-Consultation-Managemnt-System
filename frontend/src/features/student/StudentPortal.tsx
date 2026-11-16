@@ -1,12 +1,24 @@
-import { useContext, useState } from "react"
-import { CalendarDays, CalendarRange, Check, Clock3, History } from "lucide-react"
-import { AppointmentListView } from "../appointments/AppointmentListView"
+import { useCallback, useContext, useEffect, useState } from "react"
+import {
+  Bell,
+  CalendarPlus,
+  ClipboardList,
+  History,
+  LayoutDashboard,
+} from "lucide-react"
+import { notificationsApi } from "../../api"
+import { StudentAppointmentsView } from "./StudentAppointmentsView"
 import { StudentBookingView } from "./StudentBookingView"
+import { StudentDashboardView, type StudentNavigate } from "./StudentDashboardView"
 import { StudentHistoryView } from "./StudentHistoryView"
+import { StudentNotificationsView } from "./StudentNotificationsView"
+import { StudentShell, type StudentNavItem } from "./StudentShell"
 import {
   CurrentUserContext,
-  PortalShell,
+  clock,
+  fromIso,
   fullName,
+  initialsOf,
   toIso,
   useAppointments,
 } from "../../shared"
@@ -18,47 +30,91 @@ export function StudentPortal({
   onSignOut: () => void
   onOpenAccount: () => void
 }) {
-  const [drilldown, setDrilldown] = useState<string | null>(null)
   const currentUser = useContext(CurrentUserContext)
-  const [view, setView] = useState("Book Appointment")
-  const [appointments] = useAppointments()
+  const [view, setView] = useState("Dashboard")
+  const [filter, setFilter] = useState("Total")
+  const [searchQuery, setSearchQuery] = useState("")
+  const [unread, setUnread] = useState(0)
+  const [appointments] = useAppointments(currentUser?.id ?? "")
+
   const name = fullName(currentUser?.first_name, currentUser?.last_name, currentUser?.email ?? "Student")
-  const studentNumber = currentUser?.student_number
-  const now = toIso(new Date())
-  const upcoming = appointments.filter((a) => a.date >= now && a.status === "confirmed").length
-  const pending = appointments.filter((a) => ["pending", "reschedule_requested"].includes(a.status)).length
-  const completed = appointments.filter((a) => a.status === "completed").length
-  const nav = [
-    { label: "Book Appointment", icon: CalendarDays },
-    { label: "My Appointments", icon: CalendarRange },
+  const firstName = currentUser?.first_name || name
+  const detail = currentUser?.student_number ? `${currentUser.student_number} · Student` : "Student"
+
+  // Sidebar badge: keep the unread count fresh without a second source of truth.
+  useEffect(() => {
+    let live = true
+    const refresh = () =>
+      void notificationsApi
+        .list(true)
+        .then((rows) => live && setUnread(rows.length))
+        .catch(() => undefined)
+    refresh()
+    const timer = window.setInterval(refresh, 60_000)
+    window.addEventListener("focus", refresh)
+    return () => {
+      live = false
+      window.clearInterval(timer)
+      window.removeEventListener("focus", refresh)
+    }
+  }, [])
+
+  const now = new Date()
+  const today = toIso(now)
+  const mine = currentUser ? appointments.filter((a) => a.student_id === currentUser.id) : appointments
+  const pendingCount = mine.filter((a) => ["pending", "reschedule_requested"].includes(a.status)).length
+  const next = mine
+    .filter((a) => a.status === "confirmed" && a.date >= today)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.start - b.start)[0]
+  const nextLabel = next
+    ? `${next.date === today ? "Today" : fromIso(next.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}, ${clock(next.start)}`
+    : undefined
+
+  const hour = now.getHours()
+  const greeting = `${hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"}, ${firstName}`
+
+  const navItems: StudentNavItem[] = [
+    { label: "Dashboard", icon: LayoutDashboard },
+    { label: "My Appointments", icon: ClipboardList, badge: pendingCount, badgeTone: "amber" },
+    { label: "Book a Consultation", icon: CalendarPlus },
     { label: "My History", icon: History },
+    { label: "Notifications", icon: Bell, badge: unread, badgeTone: "red" },
   ]
+
+  // One navigation function shared by the sidebar, stat tiles, banner buttons and links.
+  const navigate: StudentNavigate = useCallback((target, options) => {
+    setView(target)
+    setFilter(options?.filter ?? "Total")
+    setSearchQuery("")
+  }, [])
+
   return (
-    <PortalShell
-      role="Student"
-      stats={[
-        { label: "Upcoming", value: String(upcoming), hint: "Confirmed appointments", icon: CalendarDays, onClick: () => setDrilldown("Upcoming") },
-        { label: "Pending", value: String(pending), hint: "Awaiting faculty", icon: Clock3, onClick: () => setDrilldown("Pending") },
-        { label: "Completed", value: String(completed), hint: "Consultations held", icon: History, onClick: () => setDrilldown("Completed") },
-        { label: "Total", value: String(appointments.length), hint: "All requests", icon: Check, onClick: () => setDrilldown("Total") },
-      ]}
+    <StudentShell
       name={name}
-      detail={studentNumber ? `Student ID: ${studentNumber}` : currentUser?.email ?? ""}
-      navItems={nav}
+      detail={detail}
+      initials={initialsOf(name)}
+      greeting={greeting}
+      navItems={navItems}
       active={view}
-      onNavigate={(next) => { setView(next); setDrilldown(null) }}
+      onNavigate={(label) => navigate(label)}
       onOpenAccount={onOpenAccount}
       onSignOut={onSignOut}
+      onSearch={(query) => {
+        setSearchQuery(query)
+        setFilter("Total")
+        setView("My Appointments")
+      }}
+      nextConsultation={nextLabel}
     >
-      {drilldown ? (
-        <AppointmentListView key={drilldown} filter={drilldown} />
-      ) : view === "Book Appointment" ? (
-        <StudentBookingView />
-      ) : view === "My Appointments" ? (
-        <AppointmentListView key="My Appointments" filter="Total" />
-      ) : (
-        <StudentHistoryView />
+      {view === "Dashboard" && <StudentDashboardView onNavigate={navigate} />}
+      {view === "My Appointments" && (
+        <StudentAppointmentsView key={`${filter}:${searchQuery}`} filter={filter} initialQuery={searchQuery} onNavigate={navigate} />
       )}
-    </PortalShell>
+      {view === "Book a Consultation" && <StudentBookingView onNavigate={navigate} />}
+      {view === "My History" && <StudentHistoryView onNavigate={navigate} />}
+      {view === "Notifications" && (
+        <StudentNotificationsView onNavigate={navigate} onUnreadChange={setUnread} />
+      )}
+    </StudentShell>
   )
 }

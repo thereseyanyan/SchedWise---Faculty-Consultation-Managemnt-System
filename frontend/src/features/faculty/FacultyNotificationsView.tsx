@@ -453,7 +453,6 @@ export function FacultyNotificationsView({
           >
             {notifications.markingAll ? "Marking as read…" : "Mark all as read"}
           </Button>
-          <span className="text-[12px] text-muted">Applies to all notifications for your account.</span>
         </div>
       </header>
 
@@ -607,11 +606,11 @@ export function FacultyNotificationsView({
             <h2 className="mt-4 text-[15px] font-semibold text-ink">
               {totalCount === 0 ? "You’re all caught up" : "No notifications match these filters"}
             </h2>
-            <p className="mt-1 max-w-md text-[14px] leading-6 text-muted">
-              {totalCount === 0
-                ? "Appointment updates and account notices will appear here."
-                : "Try changing the search, read status, type, or date range."}
-            </p>
+            {totalCount > 0 ? (
+              <p className="mt-1 max-w-md text-[14px] leading-6 text-muted">
+                Try changing the search, read status, type, or date range.
+              </p>
+            ) : null}
             {totalCount > 0 && hasActiveFilters ? (
               <Button
                 onClick={clearFilters}

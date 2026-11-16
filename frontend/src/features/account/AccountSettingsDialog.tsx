@@ -256,7 +256,6 @@ export function AccountSettingsDialog({
           <div className="flex items-start justify-between gap-4 px-5 pb-4 pt-6 sm:px-8">
             <div>
               <h1 className="font-display text-2xl font-bold text-ink">Account settings</h1>
-              <p className="mt-1 text-xs text-muted">Manage your profile and password in one place.</p>
             </div>
             <Button
               onClick={onClose}

@@ -176,9 +176,7 @@ export function AdminUsersView({ roleFilter }: { roleFilter?: string }) {
   return (
     <div>
       <PageTitle
-        eyebrow="Administration"
         title="User Management"
-        description="Review student applications, create faculty accounts, and manage account access."
         action={
           <div className="flex flex-wrap gap-2">
             <Button

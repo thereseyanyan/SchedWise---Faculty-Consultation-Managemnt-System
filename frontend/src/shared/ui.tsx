@@ -290,23 +290,27 @@ export function PageTitle({
   description,
   action,
 }: {
-  eyebrow: string
+  eyebrow?: string
   title: string
-  description: string
+  description?: string
   action?: ReactNode
 }) {
   return (
     <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          {eyebrow}
-        </p>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
+        {eyebrow ? (
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+            {eyebrow}
+          </p>
+        ) : null}
+        <h1 className={`${eyebrow ? "mt-2 " : ""}text-2xl font-semibold tracking-tight text-slate-900`}>
           {title}
         </h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-          {description}
-        </p>
+        {description ? (
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+            {description}
+          </p>
+        ) : null}
       </div>
       {action}
     </div>

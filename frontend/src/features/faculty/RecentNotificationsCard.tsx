@@ -97,9 +97,6 @@ export function RecentNotificationsCard({
             <Bell size={16} />
           </span>
           <p className="mt-3 text-[14px] font-semibold text-ink max-sm:break-words">You’re all caught up</p>
-          <p className="mt-1 text-[13px] text-muted max-sm:break-words">
-            Appointment updates and account notices will appear here.
-          </p>
         </div>
       ) : (
         <div className="mt-4 flex flex-1 min-h-0 flex-col gap-2">

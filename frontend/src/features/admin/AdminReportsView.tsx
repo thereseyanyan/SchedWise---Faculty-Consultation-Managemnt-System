@@ -153,9 +153,7 @@ export function AdminReportsView() {
   return (
     <div>
       <PageTitle
-        eyebrow="Reports"
         title="System Analytics"
-        description="A concise university-wide view of appointment activity and consultation demand."
       />
 
       <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
@@ -225,11 +223,6 @@ export function AdminReportsView() {
             </a>
           </div>
         </div>
-        <p aria-live="polite" className="mt-3 text-xs text-slate-500">
-          Showing {monthLabel(selectedMonth)}
-          {departmentId ? " for the selected department" : ""}
-          {facultyId ? " for the selected faculty member" : ""}.
-        </p>
       </div>
 
       {error && (
@@ -252,9 +245,6 @@ export function AdminReportsView() {
               <p className="mt-2 text-sm font-semibold text-slate-700">
                 Total Appointments
               </p>
-              <p className="mt-1 text-xs text-slate-400">
-                {monthLabel(selectedMonth)}
-              </p>
             </div>
             <div
               key="pendingRequests"
@@ -267,9 +257,6 @@ export function AdminReportsView() {
               <p className="mt-2 text-sm font-semibold text-slate-700">
                 Pending Requests
               </p>
-              <p className="mt-1 text-xs text-slate-400">
-                In the selected scope
-              </p>
             </div>
             <div
               key="activeFaculty"
@@ -281,9 +268,6 @@ export function AdminReportsView() {
               </p>
               <p className="mt-2 text-sm font-semibold text-slate-700">
                 Active Faculty
-              </p>
-              <p className="mt-1 text-xs text-slate-400">
-                Accepting consultations
               </p>
             </div>
           </>
@@ -298,9 +282,6 @@ export function AdminReportsView() {
           <div>
             <p className="text-base font-semibold text-slate-900">
               Monthly Consultation Statistics
-            </p>
-            <p className="mt-1 text-xs text-slate-500">
-              Completed appointments during the six months ending {monthLabel(selectedMonth)}
             </p>
           </div>
           {loading && <RefreshCw size={15} className="animate-spin text-slate-400" />}

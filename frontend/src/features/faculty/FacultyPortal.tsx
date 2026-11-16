@@ -305,7 +305,7 @@ export function FacultyPortal({
   ]
 
   const pageHeaders: Record<string, { title: string; description?: string }> = {
-    "Appointments": { title: "Appointments", description: "Review, respond to, and manage your consultation requests." },
+    "Appointments": { title: "Appointments" },
     "Calendar & Availability": { title: "Calendar & Availability" },
     "Consultation Records": { title: "Consultation History & Records" },
     "Student Records": { title: "Consultation History & Records" },
@@ -359,7 +359,6 @@ export function FacultyPortal({
           </div>
           <div>
             <p className="text-sm font-semibold text-ink">No upcoming consultations today</p>
-            <p className="mt-1 text-sm text-muted">New requests will appear here once approved.</p>
           </div>
         </div>
       )}

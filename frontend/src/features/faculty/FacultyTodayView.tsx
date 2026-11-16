@@ -316,7 +316,6 @@ export function FacultyTodayView({
                   <CheckCircle2 size={18} />
                 </div>
                 <p className="mt-3 font-[var(--font-display)] text-[18px] text-ink">You're all caught up</p>
-                <p className="mt-1 text-sm text-muted">New requests will appear here.</p>
               </div>
             ) : (
               visibleRequests.map((request, idx) => (
@@ -428,7 +427,6 @@ export function FacultyTodayView({
                   <CalendarDays size={18} />
                 </div>
                 <p className="mt-3 font-[var(--font-display)] text-[18px] text-ink">No upcoming appointments</p>
-                <p className="mt-1 text-sm text-muted">Approved consultations will show up here.</p>
               </div>
             ) : (
               <div className="flex flex-col">

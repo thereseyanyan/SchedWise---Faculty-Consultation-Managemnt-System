@@ -31,7 +31,7 @@ try {
         'SELECT ev.id, ev.user_id, ev.used_at,
                 (ev.expires_at <= NOW()) AS is_expired,
                 u.role_id, u.status, u.email, u.email_verified_at,
-                u.student_approval_status
+                u.student_approval_status, u.faculty_approval_status
          FROM email_verifications ev
          JOIN users u ON u.id = ev.user_id
          WHERE ev.token_hash = :token_hash
@@ -44,9 +44,13 @@ try {
         respond(['error' => 'This verification link is invalid or has expired.'], 400);
     }
 
-    $isFaculty = $verification['role_id'] === 'student';
-    $awaitingApproval = $isFaculty
+    $isStudent = $verification['role_id'] === 'student';
+    $awaitingApproval = $isStudent
         && $verification['student_approval_status'] === 'pending';
+    $studentApproved = $isStudent
+        && $verification['student_approval_status'] === 'approved';
+    $facultyBlocked = $verification['role_id'] === 'faculty'
+        && in_array($verification['faculty_approval_status'] ?? '', ['pending', 'rejected'], true);
 
     // Verification is idempotent for an already verified account. This keeps
     // browser retries and React development-mode double mounts from turning a
@@ -59,15 +63,16 @@ try {
                     'approval_required' => true,
                 ]);
             }
-            if ($verification['status'] === 'active') {
-                respond(['message' => 'Email already verified. You can sign in.']);
-            }
-            if ($isFaculty && $verification['student_approval_status'] === 'rejected') {
+            if ($isStudent && $verification['student_approval_status'] === 'rejected') {
                 respond([
                     'error' => 'This student registration was not approved. Contact an administrator.',
                     'code' => 'student_approval_rejected',
                 ], 403);
             }
+            if ($verification['status'] === 'active' && !$facultyBlocked) {
+                respond(['message' => 'Email already verified. You can sign in.']);
+            }
+            respond(['message' => 'Email already verified.']);
         }
         respond(['error' => 'This verification link is invalid or has expired.'], 400);
     }
@@ -82,10 +87,10 @@ try {
 
     $pdo->beginTransaction();
 
-    // A self-registered student account is verified but stays pending until an
-    // administrator approves it. Student and administrator-created accounts
-    // become active immediately.
-    if ($verification['status'] === 'pending' && !$awaitingApproval) {
+    // Only an approved student may be activated by verification. Every other
+    // account (including legacy pending/rejected faculty) only has its email
+    // marked as verified and keeps its current status.
+    if ($verification['status'] === 'pending' && $studentApproved) {
         $statement = $pdo->prepare(
             "UPDATE users
              SET status = 'active', email_verified_at = COALESCE(email_verified_at, NOW())
@@ -107,8 +112,11 @@ try {
 
     $pdo->commit();
 
+    $auditStatus = $studentApproved
+        ? 'active'
+        : ($awaitingApproval ? 'pending_student_approval' : 'email_verified');
     logAudit('verify_email', 'user', $verification['user_id'], [], [
-        'status' => $awaitingApproval ? 'pending_student_approval' : 'active',
+        'status' => $auditStatus,
     ]);
 
     if ($awaitingApproval) {
@@ -119,7 +127,7 @@ try {
     }
 
     respond([
-        'message' => 'Email verified successfully. You can now sign in.',
+        'message' => 'Email verified successfully.',
     ]);
 } catch (Throwable $exception) {
     if ($pdo->inTransaction()) {

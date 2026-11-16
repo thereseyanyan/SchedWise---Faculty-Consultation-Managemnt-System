@@ -8,7 +8,8 @@ import { StudentPortal } from "./features/student/StudentPortal"
 import { FacultyPortal } from "./features/faculty/FacultyPortal"
 import { AdminPortal } from "./features/admin/AdminPortal"
 import { AccountSettingsDialog } from "./features/account/AccountSettingsDialog"
-import { Button, CurrentUserContext, roleFromId } from "./shared"
+import { Button, CurrentUserContext, resetAppointments, roleFromId } from "./shared"
+import { resetNotifications } from "./shared/notificationsStore"
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null)
@@ -19,6 +20,8 @@ export default function App() {
   useEffect(() => {
     const expireSession = () => {
       setAccountOpen(false)
+      resetNotifications()
+      resetAppointments()
       setUser(null)
     }
     window.addEventListener("schedwise:session-expired", expireSession)
@@ -43,6 +46,8 @@ export default function App() {
   }, [])
 
   const role = user ? roleFromId(user.role_id) : null
+  const accountDialogPreview = import.meta.env.DEV &&
+    new URLSearchParams(window.location.search).get("account-dialog-preview") === "true"
 
   const handleSignOut = async () => {
     if (!await confirmAction("Are you sure you want to sign out?")) return
@@ -51,8 +56,18 @@ export default function App() {
     } catch (err) {
       console.error("Logout request failed.", err)
     }
+    resetNotifications()
+    resetAppointments()
     setAccountOpen(false)
     setUser(null)
+  }
+
+  const handleUserChange = (nextUser: User) => {
+    if (user?.id !== nextUser.id) {
+      resetNotifications()
+      resetAppointments()
+    }
+    setUser(nextUser)
   }
 
   if (loading) {
@@ -78,9 +93,9 @@ export default function App() {
     )
   }
 
-  if (!user) return <AuthenticationGate onLogin={setUser} />
+  if (!user) return <AuthenticationGate onLogin={handleUserChange} />
 
-  if (user.must_change_password) return <RequiredPasswordChange onChanged={setUser} onSignOut={handleSignOut} />
+  if (user.must_change_password) return <RequiredPasswordChange onChanged={handleUserChange} onSignOut={handleSignOut} />
 
   if (!role) {
     return (
@@ -120,9 +135,11 @@ export default function App() {
         />
       )}
       <AccountSettingsDialog
-        open={accountOpen}
+        open={accountOpen || accountDialogPreview}
         onClose={() => setAccountOpen(false)}
-        onUpdated={setUser}
+        onUpdated={handleUserChange}
+        variant={role === "Faculty" ? "faculty" : "default"}
+        preview={accountDialogPreview && role === "Faculty"}
       />
     </CurrentUserContext.Provider>
   )

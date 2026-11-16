@@ -25,7 +25,11 @@ export type Appointment = {
   completed_at?: string;
   cancelled_at?: string;
   cancelled_by?: string;
+  cancellation_reason?: string;
   reschedule_reason?: string;
+  reschedule_from_date?: string;
+  reschedule_from_start_minutes?: number;
+  reschedule_from_end_minutes?: number;
   created_at: string;
   updated_at: string;
   faculty_first_name?: string;
@@ -35,6 +39,8 @@ export type Appointment = {
   student_last_name?: string;
   student_number?: string;
   student_program?: string;
+  student_department_id?: string;
+  student_department_name?: string;
   summary?: string;
 };
 
@@ -98,6 +104,7 @@ export type User = {
   program?: string | null;
   phone?: string | null;
   avatar_path?: string | null;
+  timezone?: string;
 };
 
 export type FacultyAvailability = {
@@ -157,6 +164,32 @@ export type AppNotification = {
   related_appointment_id?: string;
   read_at?: string | null;
   created_at: string;
+};
+
+export type NotificationPage = {
+  items: AppNotification[];
+  pagination: {
+    page: number;
+    per_page: number;
+    total: number;
+    total_pages: number;
+  };
+  counts: {
+    total: number;
+    unread: number;
+  };
+  types: string[];
+};
+
+export type NotificationSearch = {
+  page: number;
+  per_page?: number;
+  search?: string;
+  type?: string;
+  read?: "all" | "unread";
+  from?: string;
+  to?: string;
+  sort?: "newest" | "oldest";
 };
 
 export type MonthlySeriesPoint = {
@@ -681,6 +714,14 @@ export const notificationsApi = {
   list: (unreadOnly = false) => {
     const query = unreadOnly ? "?unread=1" : "";
     return request<AppNotification[]>(`/notifications/index.php${query}`);
+  },
+
+  search: (filters: NotificationSearch, signal?: AbortSignal) => {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== "") params.set(key, String(value));
+    });
+    return request<NotificationPage>(`/notifications/index.php?${params}`, { signal });
   },
 
   markRead: (id: string) =>

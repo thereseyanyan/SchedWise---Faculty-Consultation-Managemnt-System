@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react"
+import { useContext, useEffect, useRef, useState, type FormEvent } from "react"
 import { AlertCircle, CalendarDays, CheckCircle2, Clock3, Info, X } from "lucide-react"
 import { appointmentApi, type Appointment } from "../../api"
 import { confirmAction } from "../../confirmation"
@@ -18,9 +18,75 @@ import {
   mergeAppointment,
   pillField,
   pillLabel,
+  relativeTime,
+  subscribeAppointmentRefresh,
   toIso,
   toUiAppointment,
 } from "../../shared"
+import { CurrentUserContext } from "../../shared/contexts"
+
+const DIALOG_FOCUSABLE_SELECTOR =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+function useDialogFocus(open: boolean, onClose: () => void) {
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const closeRef = useRef(onClose)
+
+  useEffect(() => {
+    closeRef.current = onClose
+  }, [onClose])
+
+  useEffect(() => {
+    if (!open) return
+    const dialog = dialogRef.current
+    const previous = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null
+    const focusable = Array.from(
+      dialog?.querySelectorAll<HTMLElement>(DIALOG_FOCUSABLE_SELECTOR) ?? [],
+    )
+    if (!focusable.some((element) => element === document.activeElement)) {
+      ;(focusable[0] ?? dialog)?.focus()
+    }
+
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault()
+        event.stopPropagation()
+        closeRef.current()
+        return
+      }
+      if (event.key !== "Tab") return
+      const currentIndex = focusable.findIndex((element) => element === document.activeElement)
+      if (focusable.length === 0) {
+        event.preventDefault()
+        dialog?.focus()
+      } else if (event.shiftKey && currentIndex <= 0) {
+        event.preventDefault()
+        focusable[focusable.length - 1].focus()
+      } else if (!event.shiftKey && currentIndex < 0) {
+        event.preventDefault()
+        focusable[0].focus()
+      } else if (!event.shiftKey && currentIndex === focusable.length - 1) {
+        event.preventDefault()
+        focusable[0].focus()
+      }
+    }
+    document.addEventListener("keydown", onKeyDown, true)
+    return () => {
+      document.removeEventListener("keydown", onKeyDown, true)
+      document.body.style.overflow = previousOverflow
+      const returnTarget = previous && previous !== document.body && previous.isConnected
+        ? previous
+        : document.querySelector<HTMLElement>("[data-dialog-focus-fallback]")
+      returnTarget?.focus({ preventScroll: true })
+    }
+  }, [open])
+
+  return dialogRef
+}
 
 type IncomingRequest = {
   id: string
@@ -28,7 +94,7 @@ type IncomingRequest = {
   reason: string
   note: string
   timeLabel: string
-  timeIso: string
+  requestedAt: string
   initials: string
   status: string
   room?: string
@@ -65,7 +131,15 @@ function formatDateLabel(dateStr: string) {
   }
 }
 
-export function FacultyTodayView() {
+export function FacultyTodayView({
+  onViewAppointments,
+  onOpenNotifications,
+}: {
+  onViewAppointments?: () => void
+  onOpenNotifications?: () => void
+}) {
+  const currentUser = useContext(CurrentUserContext)
+  const userId = currentUser?.id ?? ""
   const [requests, setRequests] = useState<IncomingRequest[]>([])
   const [upcoming, setUpcoming] = useState<Appointment[]>([])
   const [calendarAppointments, setCalendarAppointments] = useState<Appointment[]>([])
@@ -76,12 +150,15 @@ export function FacultyTodayView() {
   const [declineReason, setDeclineReason] = useState("")
   const [declineError, setDeclineError] = useState("")
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null)
+  const loadRequestRef = useRef(0)
 
   const loadData = async () => {
+    const currentRequest = ++loadRequestRef.current
     setLoading(true)
     setError(null)
     try {
       const appointments = await appointmentApi.list()
+      if (loadRequestRef.current !== currentRequest) return
       const studentName = (appt: Appointment) =>
         fullName(appt.student_first_name, appt.student_last_name, `Student ID: ${appt.student_id}`)
 
@@ -91,10 +168,10 @@ export function FacultyTodayView() {
         .map((appt) => ({
           id: appt.id,
           student_name: studentName(appt),
-          reason: appt.topic || "Consultation request",
-          note: appt.status === "reschedule_requested" ? (appt as any).reschedule_reason ?? (appt as any).note ?? "" : (appt as any).note ?? "",
+          reason: appt.reason || "No reason provided.",
+          note: appt.status === "reschedule_requested" ? appt.reschedule_reason ?? "" : "",
           timeLabel: `${formatDateLabel(appt.appointment_date)} · ${formatTime(appt.start_minutes)}`,
-          timeIso: appt.appointment_date,
+          requestedAt: appt.requested_at,
           initials: getInitials(studentName(appt)),
           status: appt.status,
           room: appt.location || undefined,
@@ -113,6 +190,7 @@ export function FacultyTodayView() {
       setUpcoming(upcomingList)
       setCalendarAppointments(appointments)
     } catch (err) {
+      if (loadRequestRef.current !== currentRequest) return
       setError(errorMessage(err, "Failed to load appointments"))
       setRequests([])
       setUpcoming([])
@@ -123,8 +201,15 @@ export function FacultyTodayView() {
   }
 
   useEffect(() => {
-    loadData()
-  }, [])
+    void loadData()
+    const unsubscribe = subscribeAppointmentRefresh(() => {
+      void loadData()
+    })
+    return () => {
+      loadRequestRef.current += 1
+      unsubscribe()
+    }
+  }, [userId])
 
   const openDecline = (request: IncomingRequest) => {
     setDeclineTarget(request)
@@ -165,20 +250,32 @@ export function FacultyTodayView() {
   const selectedAppointment = selectedAppointmentId
     ? calendarAppointments.find((appointment) => appointment.id === selectedAppointmentId) ?? null
     : null
+  const appointmentDialogRef = useDialogFocus(
+    Boolean(selectedAppointment),
+    () => setSelectedAppointmentId(null),
+  )
+  const declineDialogRef = useDialogFocus(
+    Boolean(declineTarget),
+    () => setDeclineTarget(null),
+  )
 
   const getStatusChip = (status: string) => {
     if (status === "confirmed") return { label: "Confirmed", className: "bg-green-tint text-green" }
-    if (status === "pending") return { label: "Pending", className: "bg-amber-tint text-amber" }
-    if (status === "reschedule_requested") return { label: "Reschedule", className: "bg-amber-tint text-amber" }
+    if (status === "pending") return { label: "Pending approval", className: "bg-amber-tint text-amber-800" }
+    if (status === "reschedule_requested") return { label: "Reschedule requested", className: "bg-amber-tint text-amber-800" }
     return { label: status.replace(/_/g, " "), className: "bg-soft text-ink" }
   }
 
   return (
-    <div>
+    <div
+      data-dialog-focus-fallback=""
+      tabIndex={-1}
+      className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+    >
       {error && (
-        <div className="mb-4 flex items-center justify-between rounded-[12px] border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">
-          <span>Couldn't load appointments · Retry</span>
-          <button type="button" onClick={loadData} className="font-semibold underline">
+        <div role="alert" className="mb-4 flex items-center justify-between rounded-[12px] border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">
+          <span>Couldn't load appointments: {error}</span>
+          <button type="button" onClick={loadData} className="rounded font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]">
             Retry
           </button>
         </div>
@@ -188,7 +285,7 @@ export function FacultyTodayView() {
           <div className="flex items-center justify-between">
             <h2 className="font-[var(--font-display)] text-[18px] leading-[24px] font-semibold text-ink">Needs your response</h2>
             {requests.length > 0 ? (
-              <span className="inline-flex items-center rounded-full bg-amber-tint px-2.5 py-1 text-[12px] font-semibold text-amber">
+              <span className="inline-flex items-center rounded-full bg-amber-tint px-2.5 py-1 text-[12px] font-semibold text-amber-800">
                 {requests.length}
               </span>
             ) : null}
@@ -227,23 +324,27 @@ export function FacultyTodayView() {
                   <div className="flex items-start gap-2">
                     <span className="text-[12px] text-muted mt-0.5">{idx + 1}.</span>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-ink">
-                        {request.student_name} · Pending
+                      <p title={request.student_name} className="truncate text-sm font-semibold text-ink">
+                        {request.student_name} · {request.status === "reschedule_requested" ? "Reschedule requested" : "Pending approval"}
                       </p>
-                      <p className="mt-1 line-clamp-2 text-sm text-muted">{request.topic || request.reason}</p>
-                      <p className="mt-1 text-[13px] text-muted">
+                      <p title={request.topic || request.reason} className="mt-1 line-clamp-2 break-words text-sm text-muted">{request.topic || request.reason}</p>
+                      <p className="mt-1 break-words text-[13px] text-muted">
                         {request.timeLabel}
                         {request.room ? ` · Room ${request.room}` : ""}
                       </p>
                       {request.status === "reschedule_requested" && request.note ? (
-                        <p className="mt-2 rounded-[8px] bg-amber-tint/60 px-2.5 py-1.5 text-[12px] text-ink">
+                        <p className="mt-2 break-words rounded-[8px] bg-amber-tint/60 px-2.5 py-1.5 text-[12px] text-ink">
                           Requested-time note: {request.note}
                         </p>
                       ) : null}
                     </div>
                   </div>
-                  <div className="mt-3 flex flex-col gap-2">
-                    <div className="flex gap-3">
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-x-2 gap-y-2">
+                    <div
+                      role="group"
+                      aria-label={`Actions for ${request.student_name}'s request`}
+                      className="flex shrink-0 flex-nowrap items-center gap-1.5"
+                    >
                       <Button
                         disabled={actingId === request.id}
                         onClick={async () => {
@@ -264,24 +365,38 @@ export function FacultyTodayView() {
                             setActingId("")
                           }
                         }}
-                        className="h-10 flex-1 rounded-full bg-primary text-sm font-semibold text-white"
+                        className="h-9 shrink-0 whitespace-nowrap rounded-[8px] bg-primary px-2.5 text-[12px] font-semibold text-white"
                       >
                         {actingId === request.id ? "Saving…" : request.status === "reschedule_requested" ? "Approve New Time" : "Accept"}
                       </Button>
                       <Button
                         disabled={actingId === request.id}
                         onClick={() => openDecline(request)}
-                        className="h-10 flex-1 rounded-full border border-primary bg-white text-sm font-semibold text-primary"
+                        className="h-9 shrink-0 whitespace-nowrap rounded-[8px] border border-primary bg-white px-2.5 text-[12px] font-semibold text-primary"
                       >
                         Decline
                       </Button>
+                      <Button
+                        disabled={actingId === request.id}
+                        onClick={() => setSelectedAppointmentId(request.id)}
+                        aria-label={`View details for ${request.student_name}'s request`}
+                        className="h-9 shrink-0 whitespace-nowrap rounded-[8px] border border-border-card bg-white px-2.5 text-[12px] font-semibold text-ink hover:bg-soft"
+                      >
+                        View details
+                      </Button>
                     </div>
+                    <span
+                      className="ml-auto min-w-[112px] shrink-0 whitespace-nowrap text-right text-[12px] text-muted"
+                      title={request.requestedAt}
+                    >
+                      {relativeTime(request.requestedAt)}
+                    </span>
                   </div>
                 </div>
               ))
             )}
             {moreRequests > 0 ? (
-              <button type="button" className="mt-auto pt-2 text-center text-sm font-semibold text-primary">
+              <button type="button" onClick={onViewAppointments} className="mt-auto rounded pt-2 text-center text-sm font-semibold text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]">
                 View all ({requests.length})
               </button>
             ) : null}
@@ -327,6 +442,8 @@ export function FacultyTodayView() {
                     <button
                       key={appt.id}
                       type="button"
+                      aria-label={`Open appointment details for ${studentName}`}
+                      onClick={() => setSelectedAppointmentId(appt.id)}
                       className={`flex items-center gap-3 border-b border-divider px-2 py-3 text-left transition last:border-b-0 hover:bg-soft focus-visible:outline-2 focus-visible:outline-primary ${
                         isPending ? "bg-amber-tint/40" : ""
                       }`}
@@ -342,7 +459,7 @@ export function FacultyTodayView() {
                           {appt.location ? ` · Room ${appt.location}` : ""}
                         </p>
                       </div>
-                      <span className={`inline-flex h-7 w-[90px] items-center justify-center rounded-full text-[12px] font-semibold ${status.className}`}>
+                      <span className={`inline-flex min-h-7 min-w-[90px] max-w-[150px] shrink-0 items-center justify-center rounded-full px-2.5 py-1 text-center text-[12px] leading-4 font-semibold ${status.className}`}>
                         {status.label}
                       </span>
                     </button>
@@ -351,7 +468,7 @@ export function FacultyTodayView() {
               </div>
             )}
             {moreUpcoming > 0 ? (
-              <button type="button" className="mt-auto pt-2 text-center text-sm font-semibold text-primary">
+              <button type="button" onClick={onViewAppointments} className="mt-auto rounded pt-2 text-center text-sm font-semibold text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]">
                 View all ({upcoming.length})
               </button>
             ) : null}
@@ -368,7 +485,7 @@ export function FacultyTodayView() {
           />
         </div>
         <div className="min-w-0 lg:col-span-4 [&>section]:mt-0 [&>section]:h-full">
-          <RecentNotificationsCard />
+          <RecentNotificationsCard onOpenNotifications={onOpenNotifications} />
         </div>
       </div>
       <div className="mt-4 min-w-0">
@@ -382,6 +499,7 @@ export function FacultyTodayView() {
       </div>
       {selectedAppointment && (
         <div
+          ref={appointmentDialogRef}
           className="fixed inset-0 z-50 flex items-end justify-center bg-[rgba(45,27,105,0.30)] p-0 backdrop-blur-[6px] sm:items-center sm:p-6"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) setSelectedAppointmentId(null)
@@ -391,6 +509,7 @@ export function FacultyTodayView() {
             role="dialog"
             aria-modal="true"
             aria-label="Appointment details"
+            tabIndex={-1}
             className="max-h-[90vh] w-[calc(100%-32px)] max-w-[440px] overflow-y-auto"
           >
             <AppointmentPanel
@@ -423,6 +542,7 @@ export function FacultyTodayView() {
       )}
       {declineTarget && (
         <div
+          ref={declineDialogRef}
           className="fixed inset-0 z-50 flex items-end justify-center bg-[rgba(45,27,105,0.30)] p-0 backdrop-blur-[6px] sm:items-center sm:p-6"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) setDeclineTarget(null)
@@ -432,6 +552,7 @@ export function FacultyTodayView() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="faculty-decline-title"
+            tabIndex={-1}
             className="max-h-[90vh] w-[calc(100%-32px)] max-w-[440px] overflow-y-auto rounded-[20px] bg-white p-6 shadow-[0_20px_60px_rgba(45,27,105,0.18)] sm:rounded-[20px]"
           >
             <form onSubmit={declineRequest}>
@@ -447,8 +568,8 @@ export function FacultyTodayView() {
                 <button
                   type="button"
                   onClick={() => setDeclineTarget(null)}
-                  aria-label="Close"
-                  className="flex size-8 shrink-0 items-center justify-center rounded-full bg-soft text-ink transition hover:opacity-90"
+                  aria-label="Close decline dialog"
+                  className="flex size-8 shrink-0 items-center justify-center rounded-full bg-soft text-ink transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
                 >
                   <X size={16} />
                 </button>

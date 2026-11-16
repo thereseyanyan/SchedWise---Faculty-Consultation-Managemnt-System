@@ -17,6 +17,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     // Authenticate user
     $user = authenticateUser();
 
+    $requestedId = $_GET['id'] ?? null;
+    if (is_string($requestedId) && $requestedId !== '') {
+        $appointment = fetchAppointmentById($requestedId);
+        if (!$appointment) {
+            respond(['error' => 'Appointment not found'], 404);
+        }
+
+        $canView = $user['role_id'] === 'admin'
+            || ($user['role_id'] === 'faculty' && $appointment['faculty_id'] === $user['id'])
+            || ($user['role_id'] === 'student' && $appointment['student_id'] === $user['id']);
+        if (!$canView) {
+            respond(['error' => 'Insufficient permissions to view this appointment'], 403);
+        }
+
+        respond($appointment);
+    }
+
     // Get query parameters for filtering
     $studentId = $_GET['student_id'] ?? null;
     $facultyId = $_GET['faculty_id'] ?? null;
@@ -72,10 +89,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                 uf.first_name AS faculty_first_name, uf.last_name AS faculty_last_name,
                 uf.faculty_number AS faculty_number,
                 us.first_name AS student_first_name, us.last_name AS student_last_name,
-                us.student_number AS student_number, us.program AS student_program
+                us.student_number AS student_number, us.program AS student_program,
+                us.department_id AS student_department_id,
+                d.name AS student_department_name
          FROM appointments a
          LEFT JOIN user_profiles uf ON a.faculty_id = uf.user_id
          LEFT JOIN user_profiles us ON a.student_id = us.user_id
+         LEFT JOIN departments d ON us.department_id = d.id
          LEFT JOIN consultation_records cr ON cr.appointment_id = a.id
          {$whereClause}
          ORDER BY a.appointment_date, a.start_minutes"
@@ -126,9 +146,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             respond(['error' => 'You already have an appointment at this time.'], 409);
         }
 
-        // Check if faculty exists and is active
-        $facultyStmt = $pdo->prepare("SELECT id, status FROM users WHERE id = :id AND role_id = 'faculty' FOR UPDATE");
-        $facultyStmt->execute([':id' => $input['faculty_id']]);
+        // Check if faculty exists and is active, and has not been left pending
+        // or rejected by the administrator approval workflow.
+        $facultyStmt = $pdo->prepare(
+            "SELECT id, status FROM users
+             WHERE id = :id AND role_id = 'faculty'
+               AND faculty_approval_status IN (:approved_status, :not_required_status)
+             FOR UPDATE"
+        );
+        $facultyStmt->execute([
+            ':id' => $input['faculty_id'],
+            ':approved_status' => 'approved',
+            ':not_required_status' => 'not_required',
+        ]);
         $faculty = $facultyStmt->fetch();
 
         if (!$faculty) {

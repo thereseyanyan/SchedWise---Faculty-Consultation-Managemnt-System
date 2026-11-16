@@ -417,7 +417,7 @@ export function TodayScheduleCard({
                     return (
                       <span
                         key={minute}
-                        className="absolute right-0 -translate-y-1/2 text-[12px] leading-none text-muted"
+                        className="absolute inset-x-0 -translate-y-1/2 whitespace-nowrap text-center text-[12px] leading-none text-muted"
                         style={{ top }}
                       >
                         {clock(minute).replace(":00", "")}

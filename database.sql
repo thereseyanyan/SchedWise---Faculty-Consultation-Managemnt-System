@@ -115,6 +115,9 @@ CREATE TABLE IF NOT EXISTS appointments (
   cancelled_by VARCHAR(64) NULL, -- user_id who cancelled
   cancellation_reason TEXT NULL,
   reschedule_reason TEXT NULL,
+  reschedule_from_date DATE NULL, -- current time before a student reschedule request
+  reschedule_from_start_minutes SMALLINT UNSIGNED NULL,
+  reschedule_from_end_minutes SMALLINT UNSIGNED NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE RESTRICT,

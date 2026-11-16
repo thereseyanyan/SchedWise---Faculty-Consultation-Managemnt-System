@@ -115,7 +115,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         $pdo->beginTransaction();
 
-        // Get appointment to verify it exists and is completed
+        // Get appointment to verify it exists and is confirmed or completed
         $appointmentStmt = $pdo->prepare(
             'SELECT a.*, uf.first_name AS faculty_first_name, us.first_name AS student_first_name
              FROM appointments a
@@ -135,48 +135,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             respond(['error' => 'Can only create consultation records for your own appointments'], 403);
         }
 
-        // Verify appointment is completed
-        if ($appointment['status'] !== 'completed') {
-            respond(['error' => 'Consultation records can only be created for completed appointments'], 400);
+        // Verify appointment is confirmed or completed so notes can be recorded during the consultation
+        if (!in_array($appointment['status'], ['confirmed', 'completed'], true)) {
+            respond(['error' => 'Consultation records can only be saved for confirmed or completed appointments'], 400);
         }
 
-        // Check if consultation record already exists for this appointment
+        // Update the existing record for this appointment, or create the first one
         $existingStmt = $pdo->prepare('SELECT id FROM consultation_records WHERE appointment_id = :appointment_id');
         $existingStmt->execute([':appointment_id' => $input['appointment_id']]);
-        if ($existingStmt->fetch()) {
-            respond(['error' => 'Consultation record already exists for this appointment'], 409);
-        }
+        $existing = $existingStmt->fetch();
 
-        // Create consultation record
-        $consultationId = bin2hex(random_bytes(16));
-        $statement = $pdo->prepare(
-            'INSERT INTO consultation_records (
-                id, appointment_id, faculty_id, student_id, summary, action_items, private_notes, follow_up_date
-            ) VALUES (
-                :id, :appointment_id, :faculty_id, :student_id, :summary, :action_items, :private_notes, :follow_up_date
-            )'
-        );
-        $statement->execute([
-            ':id' => $consultationId,
-            ':appointment_id' => $input['appointment_id'],
-            ':faculty_id' => $user['id'],
-            ':student_id' => $appointment['student_id'],
-            ':summary' => $input['summary'],
-            ':action_items' => $input['action_items'] ?? null,
-            ':private_notes' => $input['private_notes'] ?? null,
-            ':follow_up_date' => $input['follow_up_date'] ?? null
-        ]);
+        if ($existing) {
+            $consultationId = $existing['id'];
+            $statement = $pdo->prepare(
+                'UPDATE consultation_records
+                 SET summary = :summary, action_items = :action_items, private_notes = :private_notes, follow_up_date = :follow_up_date, updated_at = NOW()
+                 WHERE id = :id'
+            );
+            $statement->execute([
+                ':summary' => $input['summary'],
+                ':action_items' => $input['action_items'] ?? null,
+                ':private_notes' => $input['private_notes'] ?? null,
+                ':follow_up_date' => $input['follow_up_date'] ?? null,
+                ':id' => $consultationId,
+            ]);
+            $auditAction = 'update';
+            $responseCode = 200;
+        } else {
+            // Create consultation record
+            $consultationId = bin2hex(random_bytes(16));
+            $statement = $pdo->prepare(
+                'INSERT INTO consultation_records (
+                    id, appointment_id, faculty_id, student_id, summary, action_items, private_notes, follow_up_date
+                ) VALUES (
+                    :id, :appointment_id, :faculty_id, :student_id, :summary, :action_items, :private_notes, :follow_up_date
+                )'
+            );
+            $statement->execute([
+                ':id' => $consultationId,
+                ':appointment_id' => $input['appointment_id'],
+                ':faculty_id' => $user['id'],
+                ':student_id' => $appointment['student_id'],
+                ':summary' => $input['summary'],
+                ':action_items' => $input['action_items'] ?? null,
+                ':private_notes' => $input['private_notes'] ?? null,
+                ':follow_up_date' => $input['follow_up_date'] ?? null
+            ]);
+            $auditAction = 'create';
+            $responseCode = 201;
+        }
 
         $pdo->commit();
 
         // Log audit
-        logAudit('create', 'consultation_record', $consultationId, [], [
+        logAudit($auditAction, 'consultation_record', $consultationId, [], [
             'appointment_id' => $input['appointment_id'],
             'faculty_id' => $user['id'],
             'student_id' => $appointment['student_id']
         ]);
 
-        // Return created consultation record
+        // Return the saved consultation record
         $statement = $pdo->prepare(
             'SELECT cr.*,
                     a.appointment_date, a.start_minutes, a.end_minutes, a.topic,
@@ -191,12 +209,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $statement->execute([':id' => $consultationId]);
         $consultation = $statement->fetch();
 
-        respond($consultation, 201);
+        respond($consultation, $responseCode);
     } catch (Throwable $exception) {
         if ($pdo->inTransaction()) {
             $pdo->rollBack();
         }
-        respondServerError($exception, 'Failed to create consultation record.');
+        respondServerError($exception, 'Failed to save consultation record.');
     }
 }
 

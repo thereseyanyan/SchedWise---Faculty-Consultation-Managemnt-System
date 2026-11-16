@@ -27,6 +27,7 @@ respond([
         'program' => $user['program'] ?? null,
         'phone' => $user['phone'] ?? null,
         'avatar_path' => $user['avatar_path'] ?? null,
+        'timezone' => date_default_timezone_get(),
     ],
     'csrf_token' => generateCsrfToken(),
 ]);
